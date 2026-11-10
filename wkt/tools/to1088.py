@@ -9,6 +9,7 @@ from wkt.core.media import add_media_arguments, load_numpy, run_frame_tool
 
 NAME = "to1088"
 SUMMARY = "將 1920x1080 的圖片或影片補成 1920x1088"
+CATEGORY = "special"
 
 SOURCE_SIZE = (1920, 1080)
 OUTPUT_SIZE = (1920, 1088)

@@ -16,6 +16,7 @@ from wkt.core.errors import WktError
 
 NAME = "install"
 SUMMARY = "重新執行一鍵安裝：補齊 ffmpeg／OpenCV、加入 PATH、註冊右鍵選單（修復用）"
+CATEGORY = "manage"
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "install.ps1"
 

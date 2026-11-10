@@ -10,6 +10,7 @@ from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 NAME = "tobt709"
 SUMMARY = "將影片從 BT.601 色域轉成 BT.709"
+CATEGORY = "special"
 
 DEFAULT_INPUT_STANDARD = "smpte170m"
 INPUT_STANDARDS = ("smpte170m", "bt470bg", "bt601-6-525", "bt601-6-625")

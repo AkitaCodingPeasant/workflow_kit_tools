@@ -147,16 +147,44 @@ N 個程序各自：① 把自己的檔案寫進佇列 %LOCALAPPDATA%\WKT\queue\
 
 ### 指令模組契約
 
-`wkt/tools/` 下的每個模組（以及內建的 `menu`、`doctor`）都必須提供這四個名稱，`registry.validate_command()` 與測試會檢查：
+`wkt/tools/` 下的每個模組（以及所有內建指令）都必須提供這五個名稱，`registry.validate_command()` 與測試會檢查：
 
 | 名稱 | 型別 | 說明 |
 |---|---|---|
 | `NAME` | `str` | 指令名稱。小寫英數字、英文字母開頭；慣例上與檔名相同 |
-| `SUMMARY` | `str` | 一行說明，顯示在 `wkt --help` |
+| `SUMMARY` | `str` | 一行說明，顯示在 `wkt --help` 等清單中 |
+| `CATEGORY` | `str` | 分類：`general`／`special`／`manage`，見下方「分類」 |
 | `configure_parser(parser)` | 函式 | 把這個工具自己的參數加到 `parser`（不要再建立新的 ArgumentParser） |
 | `run(args)` | 函式 | 執行工具。成功回傳 `None`；失敗 `raise WktError` |
 
-指令名稱不可重複（包含內建的 `menu`），重複時載入就會報錯。
+指令名稱不可重複（包含內建指令），重複時載入就會報錯。
+
+### 分類（CATEGORY）
+
+分類只在 `wkt/registry.py` 的 `CATEGORIES` 定義一次，順序即 `wkt help all` 的顯示順序：
+
+| 分類 | 名稱 | 放什麼 | 在哪裡看得到 |
+|---|---|---|---|
+| `general` | 通用工具 | 任何影片或圖片都可能用到的工具 | 預設的 `wkt`／`wkt -h`；可放進右鍵選單 |
+| `special` | 特殊用途 | 只在特定規格或情境才會用到的工具 | 只在 `wkt help special`；**不可放進右鍵選單** |
+| `manage` | 管理指令 | 不處理檔案的內建指令（`menu`、`doctor`、`install`、`dev`） | 只在 `wkt help manage` |
+
+- **內建指令一律是 `manage`；`wkt/tools/` 下的工具不可使用 `manage`**（載入時就會報錯）。
+- 分類只影響「說明怎麼顯示」與「能不能進選單」，**指令本身永遠是平的**：`wkt to1080`，不是 `wkt special to1080`。
+- **怎麼判斷 general 還是 special**：問自己「大多數人處理一般影片時，會不會用到它？」會 → `general`。只有碰到特定尺寸、色域、交付規格才用 → `special`。拿不準就先放 `special`（寧可不佔用預設說明與選單，之後要升級只要改一行）。
+- 目前的分類：通用 = `togif`、`toframe`、`topng`、`reencode`；特殊 = `to1080`、`to1088`、`tobt709`。
+
+**說明的顯示規則**（`wkt/cli.py`）：
+
+```
+wkt / wkt -h        只列「通用工具」，最後一行告訴你其他分類怎麼看
+wkt help special    列出特殊用途工具
+wkt help manage     列出管理指令
+wkt help all        全部
+wkt <任何指令> -h   該指令自己的說明（不論分類；特殊工具要自己輸入指令才會看到它的提示）
+```
+
+輸入不存在的指令時只回報「未知的指令」並提示 `wkt help all`，不會把所有指令名稱列出來。
 
 ## 5. 程式碼慣例
 
@@ -270,6 +298,7 @@ WktError(message: str, exit_code: int = 1)
 
 - `NAME = "tomp3"`（與檔名一致）
 - `SUMMARY = "將影片的聲音轉成 MP3"`
+- `CATEGORY = "general"`（怎麼選見第 4 節「分類」；範本預設 `general`。拿不準就選 `special`）
 
 ### 步驟 3：寫純函式（組指令）
 
@@ -335,8 +364,8 @@ def test_tomp3(self) -> None:
 
 ### 步驟 7：更新工具清單測試
 
-在 `tests/test_registry.py` 把 `"tomp3"` 加進 `EXPECTED_TOOLS`。
-（這份清單是刻意要求手動維護的：新增或誤刪工具時測試都會提醒你。）
+在 `tests/test_registry.py` 把 `"tomp3": "general"` 加進 `EXPECTED_TOOLS`（名稱 → 分類）。
+（這份清單是刻意要求手動維護的：新增、誤刪工具，或悄悄改了分類，測試都會提醒你。）
 
 ### 步驟 8：執行驗證
 
@@ -376,6 +405,7 @@ MENU: dict[str, tuple[MenuItem, ...]] = {
 ```
 
 1. `MenuItem` 的第一個參數必須是 `wkt/tools/` 裡已存在的 `NAME`；打錯時註冊與測試（`test_menu_only_references_existing_tools`）都會失敗。
+   **只能放 `general` 的工具**：`special` 工具放進去會被拒絕（`check_menu_config` 與 `test_menu_contains_only_general_tools`）。這是刻意的決定，避免右鍵選單塞滿只在特定情況才用得到的項目。
 2. 順序即選單顯示順序。
 3. 副檔名必須以 `.` 開頭。
 4. 重新註冊：`wkt menu register`。註冊會先清掉該副檔名舊的項目再寫入，所以刪掉的項目也會一併消失。
@@ -477,7 +507,7 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - [ ] `wkt dev test` 全部通過
 - [ ] 新增／修改的行為有對應測試
 - [ ] 實際執行過受影響的工具
-- [ ] 新工具符合契約，檔名＝`NAME`，且 `EXPECTED_TOOLS` 已更新
+- [ ] 新工具符合契約，檔名＝`NAME`，已選好 `CATEGORY`，且 `EXPECTED_TOOLS` 已更新
 - [ ] 錯誤一律 `raise WktError`，沒有 `sys.exit` 或自己 `return 1`
 - [ ] 沒有在檔案頂端 `import cv2` / `numpy` / `winreg`
 - [ ] 沒有寫死 `"ffmpeg"`（使用 `find_ffmpeg()`）
@@ -519,6 +549,14 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - 選單執行：全部成功自動關閉、有失敗就停住。選單登記的指令多了 `--from-menu`，**升級後要重新註冊**（`wkt doctor` 會提醒）。
 - 新增 `wkt doctor` 與一鍵安裝 `install.cmd`。
 - 找不到 ffmpeg 的訊息現在附上安裝指令。
+
+**v1.4.0 的變更**（指令分類）：
+
+- 每個指令模組新增 `CATEGORY`（契約由四個名稱變成五個）：通用 `general`／特殊 `special`／管理 `manage`。
+- 預設的 `wkt`／`wkt -h` 只列通用工具；`wkt help special｜manage｜all` 查看其他分類。特殊工具與管理指令仍然可以直接輸入使用，`wkt <指令> -h` 也照常顯示。
+- 輸入不存在的指令時，不再列出全部指令名稱，改為提示 `wkt help all`（結束碼仍是 2）。
+- 分類：`to1080`、`to1088`、`tobt709` 為特殊；`togif`、`toframe`、`topng`、`reencode` 為通用。右鍵選單只允許通用工具。
+- 自訂的工具若沒有 `CATEGORY`，升級後載入會直接報錯，請依第 4 節補上。
 
 **v1.3.0 的變更**（所有操作收進 `wkt` 指令）：
 

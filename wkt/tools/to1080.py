@@ -9,6 +9,7 @@ from wkt.core.media import add_media_arguments, run_frame_tool
 
 NAME = "to1080"
 SUMMARY = "將 1920x1088 的圖片或影片裁成 1920x1080"
+CATEGORY = "special"
 
 SOURCE_SIZE = (1920, 1088)
 OUTPUT_SIZE = (1920, 1080)

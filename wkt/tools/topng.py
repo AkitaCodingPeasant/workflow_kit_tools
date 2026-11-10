@@ -11,6 +11,7 @@ from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 NAME = "topng"
 SUMMARY = "將 .webp、.jpg 等圖片轉換成 PNG"
+CATEGORY = "general"
 
 OUTPUT_SUFFIX = ".png"
 

@@ -14,9 +14,13 @@ from wkt.core.ffmpeg import find_ffmpeg, probe_duration, run_ffmpeg
 from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 
-# ── 1. 工具資訊（registry 會檢查這四個名稱都存在）──────────────────────────
+# ── 1. 工具資訊（registry 會檢查這五個名稱都存在）──────────────────────────
 NAME = "template"  # 指令名稱：小寫英數字，開頭為英文字母，且不可與其他工具重複
 SUMMARY = "範例工具：把影片複製一份"  # 一行說明，會顯示在 `wkt --help`
+# 分類：任何影片／圖片都可能用到 → "general"（出現在預設的 wkt --help）；
+# 只在特定規格或情境才用得到 → "special"（只出現在 wkt help special，也不能放進右鍵選單）。
+# 工具不可使用 "manage"（那是 menu／doctor 這類內建指令專用）。
+CATEGORY = "general"
 
 DEFAULT_TAG = "copy"  # 預設輸出檔名後綴，例如 input_copy.mp4
 

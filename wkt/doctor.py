@@ -23,6 +23,7 @@ from wkt.core.ffmpeg import find_ffmpeg
 
 NAME = "doctor"
 SUMMARY = "檢查執行環境（Python／ffmpeg／OpenCV／選單／PATH）並提供修復建議"
+CATEGORY = "manage"
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 MIN_PYTHON = (3, 10)
