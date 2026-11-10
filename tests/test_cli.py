@@ -69,6 +69,11 @@ class CliBehaviorTests(unittest.TestCase):
 		self.assertEqual(code, 1)
 		self.assertIn("找不到輸入檔案", err)
 
+	def test_dev_requires_an_action_and_runs_a_filtered_test(self) -> None:
+		self.assertNotEqual(run_cli("dev")[0], 0)
+		code, _, err = run_cli("dev", "test", "-k", "test_ensure_not_same")
+		self.assertEqual(code, 0, err)
+
 	def test_version(self) -> None:
 		self.assertEqual(run_cli("--version")[0], 0)
 

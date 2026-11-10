@@ -44,7 +44,7 @@
 | 縮排 | `.py` 使用 **Tab**（沿用專案原本風格，`.editorconfig` 已設定） |
 
 ```
-scripts\test.cmd                         跑全部測試
+wkt dev test                             跑全部測試（可加 -v 或 -k 關鍵字）
 py -3 -m wkt --help                      不經 wkt.cmd 直接執行
 set WKT_DEBUG=1                          未預期的例外顯示完整 traceback（除錯用）
 ```
@@ -54,6 +54,7 @@ set WKT_DEBUG=1                          未預期的例外顯示完整 tracebac
 ```
 workflow_kit_tools/
 ├── wkt.cmd                  指令入口（右鍵選單與使用者都呼叫它）
+├── install.cmd              一鍵安裝入口（唯一需要手動雙擊的檔案）
 ├── requirements.txt         選用相依套件（OpenCV、numpy）
 ├── README.md                使用說明
 ├── .editorconfig  .gitignore
@@ -67,6 +68,8 @@ workflow_kit_tools/
 │   ├── launcher.py          右鍵選單執行階段：多選彙整、結果畫面、失敗停住
 │   ├── menu.py              右鍵選單的設定（MENU）與註冊／解除／狀態
 │   ├── doctor.py            wkt doctor：環境檢查與修復建議
+│   ├── install.py           wkt install：重新執行安裝（修復用）
+│   ├── dev.py               wkt dev：測試、打包、轉換圖示、更新
 │   ├── core/                所有工具共用的功能（見第 6 節）
 │   │   ├── errors.py        WktError
 │   │   ├── args.py          共用的命令列參數（輸入檔）
@@ -79,9 +82,9 @@ workflow_kit_tools/
 │       └── togif.py  reencode.py  tobt709.py  toframe.py  to1080.py  to1088.py
 │
 ├── tests/                   單元測試與端對端測試
-├── scripts/                 維護用腳本（install、註冊選單、測試、打包、更新）
+├── scripts/install.ps1      安裝程式本體（由 install.cmd 與 wkt install 呼叫）
 ├── docs/                    文件（本檔案）
-├── assets/                  icon.png（原圖）與 icon.ico（右鍵選單用，由 make_icon.py 產生）
+├── assets/                  icon.png（原圖）與 icon.ico（右鍵選單用，由 wkt dev icon 產生）
 ├── dist/                    打包輸出（自動產生，不納入版本控制）
 └── archive/                 舊檔備份（不納入版本控制）
 ```
@@ -94,7 +97,8 @@ workflow_kit_tools/
 | 兩個以上工具都用得到的函式 | `wkt/core/` |
 | 只有單一工具用的函式 | 留在該工具檔內 |
 | 新增右鍵選單項目 | `wkt/menu.py` 的 `MENU` |
-| 維護用的批次檔或腳本 | `scripts/` |
+| 維護／開發用的功能（測試、打包…） | `wkt/dev.py`，新增一個 `wkt dev` 動作 |
+| 安裝流程的修改 | `scripts/install.ps1`（注意要保留 UTF-8 BOM） |
 | 測試 | `tests/test_<主題>.py` |
 | 文件 | `docs/` |
 
@@ -337,7 +341,7 @@ def test_tomp3(self) -> None:
 ### 步驟 8：執行驗證
 
 ```
-scripts\test.cmd                       全部測試必須通過
+wkt dev test                           全部測試必須通過
 wkt tomp3 --help                       確認參數說明正確
 wkt tomp3 某個影片.mp4                  實際跑一次，確認輸出檔案
 wkt tomp3 不存在.mp4                    確認錯誤訊息與結束碼（echo %errorlevel% 應為 1）
@@ -352,7 +356,7 @@ wkt tomp3 不存在.mp4                    確認錯誤訊息與結束碼（echo
 
 見下一節。
 
-**新增工具的完成標準**：契約齊全、有測試、`scripts\test.cmd` 通過、實際跑過一次、README 已更新。
+**新增工具的完成標準**：契約齊全、有測試、`wkt dev test` 通過、實際跑過一次、README 已更新。
 
 ## 8. 標準步驟：新增右鍵選單項目
 
@@ -374,7 +378,7 @@ MENU: dict[str, tuple[MenuItem, ...]] = {
 1. `MenuItem` 的第一個參數必須是 `wkt/tools/` 裡已存在的 `NAME`；打錯時註冊與測試（`test_menu_only_references_existing_tools`）都會失敗。
 2. 順序即選單顯示順序。
 3. 副檔名必須以 `.` 開頭。
-4. 重新註冊：`wkt menu register`（或雙擊 `scripts\register_menu.cmd`）。註冊會先清掉該副檔名舊的項目再寫入，所以刪掉的項目也會一併消失。
+4. 重新註冊：`wkt menu register`。註冊會先清掉該副檔名舊的項目再寫入，所以刪掉的項目也會一併消失。
 5. 在檔案總管對該類型檔案按右鍵 →「顯示更多選項」→ **WKT**，確認項目出現並實際點一次。
 6. 若是**移除某個副檔名**：先 `wkt menu unregister`（趁它還在 `MENU` 裡），再從 `MENU` 刪除，最後 `wkt menu register`。否則舊副檔名的項目會殘留在 registry。
 
@@ -385,7 +389,7 @@ MENU: dict[str, tuple[MenuItem, ...]] = {
 1. **先跑測試**，確認修改前是綠燈。
 2. **修改 `wkt/core/` 前，先搜尋有哪些工具在用它**（搜尋函式名稱）。核心函式的行為變更會影響所有工具。
 3. **預設值、預設輸出檔名、參數名稱視為對外介面**：使用者的腳本與右鍵選單依賴它們。要改請在文件中註明，並提高版本號（見第 11 節）。
-4. 修改完成後：新增或更新對應測試 → `scripts\test.cmd` → 實際跑一次受影響的工具。
+4. 修改完成後：新增或更新對應測試 → `wkt dev test` → 實際跑一次受影響的工具。
 5. 行為有變更時更新 `README.md` 與本文件。
 
 **判斷要不要抽到 `core/`**：同樣的程式碼在第二個工具出現時，才抽出來；只有一個工具用就留在該工具檔內。
@@ -393,7 +397,7 @@ MENU: dict[str, tuple[MenuItem, ...]] = {
 ## 10. 測試指南
 
 ```
-scripts\test.cmd                                  全部測試
+wkt dev test                                      全部測試
 py -3 -m unittest tests.test_commands -v          單一檔案
 py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 ```
@@ -404,6 +408,7 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 | `tests/test_core.py` | `core/paths.py` 的規則、時間碼解析、進度條 | 否 |
 | `tests/test_batch.py` | 批次執行：單檔／多檔／失敗不中斷／`-o` 衝突 | 否 |
 | `tests/test_doctor.py` | `wkt doctor` 的檢查與結束碼 | 否 |
+| `tests/test_dev.py` | `wkt dev`（打包、圖示）與 `wkt install`；防止 `install.ps1` 遺失 BOM | 部分需要 OpenCV |
 | `tests/test_commands.py` | 各工具「組 ffmpeg 指令」的純函式 | 否 |
 | `tests/test_cli.py` | CLI 行為、各工具端對端、批次、進度條（用 ffmpeg 即時產生測試影片） | 是，沒裝會自動略過 |
 | `tests/test_launcher.py` | 佇列、領導者鎖；實際同時啟動多個程序，驗證只有一個負責處理（約 8 秒） | 部分需要 ffmpeg |
@@ -423,41 +428,43 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - 新增工具或選項：第二位（1.0.0 → 1.1.0）
 - 改變既有預設值、參數名稱或輸出檔名：第一位（1.0.0 → 2.0.0）
 
-**在這台電腦更新**：雙擊 `scripts\update.cmd`。它會依序：跑測試（失敗就中止）→ 產生 `dist\WKT-portable.zip` → 重新註冊右鍵選單。
+**在這台電腦更新**：`wkt dev update`。它會依序：跑測試（失敗就中止）→ 產生 `dist\WKT-portable.zip` → 重新註冊右鍵選單。
 
-**打包**：`py -3 scripts\build_portable.py` 產生 `dist\WKT-portable.zip`。內容是 `wkt/` 底下所有 `.py`、`wkt.cmd`、`requirements.txt`、README、本文件，以及兩個選單腳本。新增了需要一起打包的非 `.py` 檔案時，要把它加進 `scripts/build_portable.py` 的 `EXTRA_FILES`。
+**打包**：`wkt dev build` 產生 `dist\WKT-portable.zip`。內容是 `wkt/` 底下所有 `.py`，加上 `wkt/dev.py` 裡 `EXTRA_FILES` 列出的檔案（`wkt.cmd`、`install.cmd`、`scripts/install.ps1`、`requirements.txt`、README、本文件、圖示）。新增了需要一起打包的非 `.py` 檔案時，要把它加進 `EXTRA_FILES`（缺檔時打包會直接失敗並列出缺少的檔案）。
 
 **在其他電腦安裝**：
 
 1. 解壓縮到固定資料夾（之後不要搬動）。
-2. 雙擊 `scripts\install.cmd`。它會依序：補齊 Python 與 ffmpeg（`winget`）和 OpenCV（`pip`）→ 把專案資料夾加入使用者 PATH → 註冊右鍵選單 → 執行 `wkt doctor` 確認。開始前會列出將要做的事並詢問確認。
+2. 雙擊根目錄的 `install.cmd`（**整個流程唯一需要手動點的一步**，之後都用 `wkt` 指令）。它會依序：補齊 Python 與 ffmpeg（`winget`）和 OpenCV（`pip`）→ 把專案資料夾加入使用者 PATH → 註冊右鍵選單 → 執行 `wkt doctor` 確認。開始前會列出將要做的事並詢問確認。
 
-`install.cmd` 的參數：`-CheckOnly`（只檢查，不改任何東西）、`-Yes`（不詢問）、`-NoPath`（不改 PATH）、`-NoMenu`（不註冊選單）。
+`install.cmd` 的參數：`-CheckOnly`（只檢查，不改任何東西）、`-Yes`（不詢問）、`-NoPath`（不改 PATH）、`-NoMenu`（不註冊選單）。裝好之後要修復或重裝，用 `wkt install`（參數 `--yes`、`--no-path`、`--no-menu`）；只想檢查用 `wkt doctor`。第一次安裝必須是 `install.cmd`，因為那時電腦上可能還沒有 Python。
+
+安裝後 PATH 要**重新開啟終端機**才會生效，在那之前請用完整路徑或 `.\wkt`。
 沒有 `winget` 的電腦（舊版 Windows 10）請手動安裝 Python、ffmpeg 後再執行。剛用 winget 裝好的程式，若目前視窗還找不到，請關掉視窗重新執行一次。
 
-**更新其他電腦**：覆蓋解壓縮到原位置即可。選單設定（`MENU`）或選單指令格式有變動時，再執行一次 `scripts\register_menu.cmd`（`wkt doctor` 會在選單設定過舊時提醒）。只改工具邏輯不需要重新註冊。
+**更新其他電腦**：覆蓋解壓縮到原位置即可。選單設定（`MENU`）或選單指令格式有變動時，再執行一次 `wkt menu register`（`wkt doctor` 會在選單設定過舊時提醒）。只改工具邏輯不需要重新註冊。
 
 ## 12. 右鍵選單的限制與設計決策
 
 - **只有第二層（傳統選單）。** 原因：Windows 11 的第一層新式選單需要「套件身分」，也就是簽章的 MSIX 套件。這代表要建立自簽憑證、把它加入整台電腦的信任清單、並依賴特定版本的 Windows SDK 工具，部署與散布都複雜，也有安全顧慮。本專案已決定不採用，並移除所有相關程式。若未來要重新評估，需要正式的程式碼簽章憑證。
 - **只寫入 HKCU**：`HKCU\Software\Classes\SystemFileAssociations\<副檔名>\shell\WorkflowKitTools`。不需要管理員權限，也只影響目前使用者。
-- **選單圖示**：registry 的 `Icon` 不支援 PNG，只吃 `.ico`／exe／dll。圖示的來源是 `assets/icon.png`，由 `scripts/make_icon.py` 轉成 `assets/icon.ico`（含 16～256px 多種尺寸，透明底、圖案置中）。**更換圖示的步驟**：換掉 `assets/icon.png` → `py -3 scripts\make_icon.py` → `wkt menu register`。`icon.ico` 要一併保留，因為註冊時直接使用它，不需要 OpenCV。
+- **選單圖示**：registry 的 `Icon` 不支援 PNG，只吃 `.ico`／exe／dll。圖示的來源是 `assets/icon.png`，由 `wkt dev icon` 轉成 `assets/icon.ico`（含 16～256px 多種尺寸，透明底、圖案置中）。**更換圖示的步驟**：換掉 `assets/icon.png` → `wkt dev icon` → `wkt menu register`。`icon.ico` 要一併保留，因為註冊時直接使用它，不需要 OpenCV。
 - **路徑是絕對路徑**：選單指令寫死了 `wkt.cmd` 的位置，所以專案資料夾移動後要重新註冊。`wkt menu status`／`wkt doctor` 會區分兩種狀況：**設定較舊**（指令格式更新，舊指令仍可用，只是警告）與**位置不存在**（資料夾被搬走，選單已失效，視為失敗）。
 - **多選與結果畫面**見第 4 節「右鍵選單的執行階段」。這套機制只在選單指令（`--from-menu`）啟用；在終端機直接執行 `wkt` 時不會有 0.5 秒的收集等待，也不會有自動關閉的倒數。
-- **解除安裝**：`wkt menu unregister`（或 `scripts\unregister_menu.cmd`），再刪除專案資料夾即可，沒有其他殘留。
+- **解除安裝**：`wkt menu unregister`，再刪除專案資料夾即可，沒有其他殘留。
 
 ## 13. 疑難排解
 
 | 症狀 | 原因與處理 |
 |---|---|
-| 選單沒有圖示 | 確認 `assets/icon.ico` 存在（沒有就執行 `py -3 scripts\make_icon.py`），再 `wkt menu register`；圖示若沒更新，重新啟動檔案總管 |
+| 選單沒有圖示 | 確認 `assets/icon.ico` 存在（沒有就執行 `wkt dev icon`），再 `wkt menu register`；圖示若沒更新，重新啟動檔案總管 |
 | 右鍵選單看不到 WKT | Windows 11 要按「顯示更多選項」或 Shift+F10；再用 `wkt menu status` 確認是否已註冊 |
-| 移動資料夾後選單沒反應 | 重新執行 `scripts\register_menu.cmd` |
+| 移動資料夾後選單沒反應 | 重新執行 `wkt menu register` |
 | 找不到 ffmpeg | 安裝 ffmpeg（例如 `winget install Gyan.FFmpeg`）並重新開啟終端機，使 PATH 生效 |
 | `缺少 opencv-python` | `pip install -r requirements.txt` |
 | 尺寸必須是 1920x1088 | `to1080` 只接受 1920x1088；`to1088` 只接受 1920x1080 |
 | 從選單執行時視窗一閃而過 | 全部成功時會顯示結果、3 秒後自動關閉；失敗則會停住等你按 Enter。若連失敗都一閃而過，先執行 `wkt doctor`，再在終端機直接執行同一個指令查看 |
-| 不確定環境哪裡有問題 | 執行 `wkt doctor`：逐項檢查並附修復指令；`scripts\install.cmd -CheckOnly` 效果相同 |
+| 不確定環境哪裡有問題 | 執行 `wkt doctor`：逐項檢查並附修復指令；`install.cmd -CheckOnly` 效果相同 |
 | 沒有看到進度條 | 進度條只在互動式終端機顯示；使用了 `-v`、或輸出被重新導向時不會顯示 |
 | 想看 ffmpeg 完整輸出 | `wkt -v <工具> ...`，或設定環境變數 `WKT_VERBOSE=1` |
 | 多選檔案時有些檔案沒處理 | 先看結果視窗的「失敗的檔案」清單；多選時所有檔案由同一個視窗處理，不會每個檔案各開一個 |
@@ -467,7 +474,7 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 
 ## 14. 提交前檢查清單
 
-- [ ] `scripts\test.cmd` 全部通過
+- [ ] `wkt dev test` 全部通過
 - [ ] 新增／修改的行為有對應測試
 - [ ] 實際執行過受影響的工具
 - [ ] 新工具符合契約，檔名＝`NAME`，且 `EXPECTED_TOOLS` 已更新
@@ -489,9 +496,9 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 | `wkt.py` | `wkt/cli.py`、`wkt/registry.py`（工具改為自動探索） |
 | `togif.py` `reencode.py` `tobt709.py` `toframe.py` `to1080.py` `to1088.py` | `wkt/tools/` 內同名檔案 |
 | `register_wkt_mp4.py` | `wkt/menu.py`（`wkt menu register`） |
-| `register_wkt_mp4.cmd` | `scripts/register_menu.cmd` |
-| `update_wkt.cmd` | `scripts/update.cmd` |
-| `wkt_shell/build_portable.py` | `scripts/build_portable.py` |
+| `register_wkt_mp4.cmd` | `wkt menu register` |
+| `update_wkt.cmd` | `wkt dev update` |
+| `wkt_shell/build_portable.py` | `wkt dev build` |
 | `WKT-portable-win11-x64.zip` | `dist/WKT-portable.zip` |
 | `icon.png` | `assets/icon.png`（現在用於右鍵選單圖示，見第 12 節） |
 | `wkt_shell/` 其餘（MSIX、DLL、簽章） | 已移除（見第 12 節） |
@@ -510,7 +517,14 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - 所有工具接受多個輸入檔；右鍵多選只開一個視窗並顯示 `[i/n]`。
 - ffmpeg 預設只顯示進度條，失敗時才印出 ffmpeg 的錯誤；`wkt -v` 恢復完整輸出。
 - 選單執行：全部成功自動關閉、有失敗就停住。選單登記的指令多了 `--from-menu`，**升級後要重新註冊**（`wkt doctor` 會提醒）。
-- 新增 `wkt doctor` 與 `scripts\install.cmd`。
+- 新增 `wkt doctor` 與一鍵安裝 `install.cmd`。
 - 找不到 ffmpeg 的訊息現在附上安裝指令。
+
+**v1.3.0 的變更**（所有操作收進 `wkt` 指令）：
+
+- 根目錄只剩 `install.cmd` 一個需要手動雙擊的入口；`scripts/` 只留 `install.ps1`。
+- 新增 `wkt dev test｜build｜icon｜update`，取代原本的 `test.cmd`、`update.cmd`、`build_portable.py`、`make_icon.py`。
+- 新增 `wkt install`（修復用）；註冊／解除選單原本就是 `wkt menu register｜unregister`，`register_menu.cmd`、`unregister_menu.cmd` 已移除。
+- **已移除的腳本**：`scripts/register_menu.cmd`、`unregister_menu.cmd`、`test.cmd`、`update.cmd`、`build_portable.py`、`make_icon.py`。若有捷徑指向它們，請改用上述 `wkt` 指令。
 
 舊檔案的完整備份在 `archive/pre-refactor-backup.zip`。

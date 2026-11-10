@@ -123,7 +123,7 @@ Write-Step 'Python'
 if ($needPython) {
 	Install-WithWinget 'Python.Python.3.12' 'Python'
 	if (-not (Test-Python)) {
-		throw 'Python 已安裝，但目前視窗還找不到。請關閉此視窗、重新執行 scripts\install.cmd。'
+		throw 'Python 已安裝，但目前視窗還找不到。請關閉此視窗、重新雙擊 install.cmd。'
 	}
 }
 Write-Done '可用'
@@ -132,7 +132,7 @@ Write-Step 'ffmpeg'
 if (-not (Test-FFmpeg)) {
 	Install-WithWinget 'Gyan.FFmpeg' 'ffmpeg'
 	if (-not (Test-FFmpeg)) {
-		throw 'ffmpeg 已安裝，但目前視窗還找不到。請關閉此視窗、重新執行 scripts\install.cmd。'
+		throw 'ffmpeg 已安裝，但目前視窗還找不到。請關閉此視窗、重新雙擊 install.cmd。'
 	}
 }
 Write-Done '可用'

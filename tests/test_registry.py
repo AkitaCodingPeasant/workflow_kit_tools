@@ -66,9 +66,9 @@ class MenuConfigTests(unittest.TestCase):
 		self.assertTrue(line.endswith(' --from-menu togif "%1"'))
 		self.assertIn("wkt.cmd", line)
 
-	def test_builtin_commands_include_menu_and_doctor(self) -> None:
+	def test_builtin_commands(self) -> None:
 		builtins, _ = registry.load_commands()
-		self.assertEqual({module.NAME for module in builtins}, {"menu", "doctor"})
+		self.assertEqual({module.NAME for module in builtins}, {"menu", "doctor", "install", "dev"})
 
 
 if __name__ == "__main__":
