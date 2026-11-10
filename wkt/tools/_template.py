@@ -9,7 +9,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from wkt.core.ffmpeg import find_ffmpeg, run_ffmpeg
+from wkt.core.args import add_input_argument
+from wkt.core.ffmpeg import find_ffmpeg, probe_duration, run_ffmpeg
 from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 
@@ -36,15 +37,22 @@ def build_ffmpeg_command(ffmpeg_path: str, input_path: Path, output_path: Path) 
 
 # ── 3. 命令列參數：只定義這個工具自己的參數 ─────────────────────────────────
 def configure_parser(parser: argparse.ArgumentParser) -> None:
-	parser.add_argument("input", help="輸入影片路徑")
+	add_input_argument(parser, "輸入影片路徑")  # 固定用這個：支援多個檔案，批次由 wkt.batch 處理
 	parser.add_argument("-o", "--output", help=f"輸出路徑；未指定時會自動加上 _{DEFAULT_TAG}")
 
 
 # ── 4. 執行：成功就印「完成：…」；失敗一律 raise WktError，不要自己 print／exit ──
+# 注意：run() 每次只會拿到「一個」檔案（args.input 是字串）。多檔案由 wkt.batch 逐一呼叫，
+# 工具本身不需要處理迴圈、不需要處理 -o 與多檔案的衝突。
 def run(args: argparse.Namespace) -> None:
 	input_path = require_input_file(args.input)
 	output_path = derive_output(input_path, args.output, tag=DEFAULT_TAG)
 	ensure_not_same(input_path, output_path)
 
-	run_ffmpeg(build_ffmpeg_command(find_ffmpeg(), input_path, output_path))
+	ffmpeg_path = find_ffmpeg()
+	# duration（秒）讓 run_ffmpeg 能顯示進度條；輸出是圖片等「沒有長度」的工具可以省略
+	run_ffmpeg(
+		build_ffmpeg_command(ffmpeg_path, input_path, output_path),
+		duration=probe_duration(ffmpeg_path, input_path),
+	)
 	print(f"完成：{output_path}")

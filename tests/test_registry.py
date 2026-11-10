@@ -63,8 +63,12 @@ class MenuConfigTests(unittest.TestCase):
 	def test_command_line_quotes_launcher_and_path(self) -> None:
 		line = menu.command_line("togif")
 		self.assertTrue(line.startswith('"'))
-		self.assertTrue(line.endswith(' togif "%1"'))
+		self.assertTrue(line.endswith(' --from-menu togif "%1"'))
 		self.assertIn("wkt.cmd", line)
+
+	def test_builtin_commands_include_menu_and_doctor(self) -> None:
+		builtins, _ = registry.load_commands()
+		self.assertEqual({module.NAME for module in builtins}, {"menu", "doctor"})
 
 
 if __name__ == "__main__":

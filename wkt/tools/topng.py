@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from wkt.core.args import add_input_argument
 from wkt.core.errors import WktError
 from wkt.core.ffmpeg import find_ffmpeg, run_ffmpeg
 from wkt.core.paths import derive_output, ensure_not_same, require_input_file
@@ -32,7 +33,7 @@ def build_ffmpeg_command(ffmpeg_path: str, input_path: Path, output_path: Path) 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
 	parser.description = "將 .webp、.jpg、.jpeg、.bmp、.tiff 等圖片轉換成 PNG；動態圖片只轉第一幀。"
-	parser.add_argument("input", help="輸入圖片路徑")
+	add_input_argument(parser, "輸入圖片路徑")
 	parser.add_argument("-o", "--output", help="輸出路徑；未指定時會使用同層同名 .png")
 	parser.add_argument("-f", "--force", action="store_true", help="輸出檔案已存在時直接覆蓋")
 

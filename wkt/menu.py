@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,7 +46,8 @@ def menu_key(extension: str) -> str:
 
 
 def command_line(tool: str) -> str:
-	return f'"{LAUNCHER}" {tool} "%1"'
+	"""選單項目實際執行的指令。--from-menu 讓 wkt 啟用多選彙整與結果畫面（見 wkt/launcher.py）。"""
+	return f'"{LAUNCHER}" --from-menu {tool} "%1"'
 
 
 def check_menu_config() -> None:
@@ -117,15 +119,48 @@ def unregister() -> None:
 		print(f"{'已解除' if removed else '原本就未註冊'}：{extension}")
 
 
-def status() -> None:
+def _read_value(winreg, path: str, name: str) -> str | None:
+	try:
+		with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:
+			return winreg.QueryValueEx(key, name)[0]
+	except FileNotFoundError:
+		return None
+
+
+def menu_state(extension: str) -> str:
+	"""回傳選單狀態：
+
+	- "missing"：未註冊
+	- "ok"：與目前設定一致
+	- "stale"：已註冊但設定與目前版本不同（例如指令格式更新），舊指令的程式仍在，可以繼續用
+	- "broken"：已註冊，但指令指向的 wkt.cmd 已不存在（通常是資料夾被移動），選單會失效
+	"""
 	import winreg
 
+	base = menu_key(extension)
+	if _read_value(winreg, base, "MUIVerb") is None:
+		return "missing"
+	for index, item in enumerate(MENU[extension], start=1):
+		command = _read_value(winreg, rf"{base}\shell\{index:02d}_{item.tool}\command", "")
+		if command != command_line(item.tool):
+			launcher = re.match(r'"([^"]+)"', command or "")
+			return "stale" if launcher and Path(launcher.group(1)).is_file() else "broken"
+	if ICON.is_file() and _read_value(winreg, base, "Icon") != str(ICON):
+		return "stale"
+	return "ok"
+
+
+STATE_TEXT = {
+	"ok": "已註冊",
+	"missing": "未註冊（執行 wkt menu register）",
+	"stale": "已註冊但設定較舊（仍可使用，建議執行 wkt menu register 更新）",
+	"broken": "已註冊但指向的位置已不存在，可能是資料夾被移動（執行 wkt menu register 修復）",
+}
+
+
+def status() -> None:
 	for extension in MENU:
-		try:
-			with winreg.OpenKey(winreg.HKEY_CURRENT_USER, menu_key(extension)):
-				print(f"已註冊：{extension}")
-		except FileNotFoundError:
-			print(f"未註冊：{extension}")
+		print(f"{extension}：{STATE_TEXT[menu_state(extension)]}")
 
 
 ACTIONS = {"register": register, "unregister": unregister, "status": status}

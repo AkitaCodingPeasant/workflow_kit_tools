@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from wkt.core.ffmpeg import find_ffmpeg, run_ffmpeg
+from wkt.core.args import add_input_argument
+from wkt.core.ffmpeg import find_ffmpeg, probe_duration, run_ffmpeg
 from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 
@@ -50,7 +51,7 @@ def build_ffmpeg_command(
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
-	parser.add_argument("input", help="輸入影片路徑")
+	add_input_argument(parser, "輸入影片路徑")
 	parser.add_argument("-o", "--output", help=f"輸出路徑；未指定時會自動加上 _{TAG}")
 	parser.add_argument("--crf", type=int, default=18, help="H.264 品質，數字越小品質越高，預設 18")
 	parser.add_argument("--preset", default="medium", help="x264 preset，預設 medium")
@@ -62,13 +63,14 @@ def run(args: argparse.Namespace) -> None:
 	output_path = derive_output(input_path, args.output, tag=TAG)
 	ensure_not_same(input_path, output_path)
 
+	ffmpeg_path = find_ffmpeg()
 	command = build_ffmpeg_command(
-		ffmpeg_path=find_ffmpeg(),
+		ffmpeg_path=ffmpeg_path,
 		input_path=input_path,
 		output_path=output_path,
 		crf=args.crf,
 		preset=args.preset,
 		audio_bitrate=args.audio_bitrate,
 	)
-	run_ffmpeg(command)
+	run_ffmpeg(command, duration=probe_duration(ffmpeg_path, input_path))
 	print(f"完成：{output_path}")
