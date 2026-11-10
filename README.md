@@ -26,7 +26,7 @@
 
 ## 使用
 
-管理指令：`wkt doctor`（檢查環境）、`wkt install`（修復安裝）、`wkt menu`（右鍵選單）、`wkt dev`（開發用）。其餘都是處理檔案的工具。
+管理指令：`wkt doctor`（檢查環境，並對每個問題給出修復指令）、`wkt install`（修復安裝）、`wkt menu`（右鍵選單）、`wkt dev`（開發用）。其餘都是處理檔案的工具。
 
 ```
 wkt                      列出所有指令
@@ -34,18 +34,27 @@ wkt <工具> --help        查看某個工具的參數
 wkt togif input.mp4      範例：影片轉 GIF
 wkt togif a.mp4 b.mp4    一次處理多個檔案（顯示 [1/2]…並彙整成功／失敗）
 wkt -v reencode a.mp4    顯示 ffmpeg 的完整輸出（預設只顯示進度條）
-wkt doctor               檢查執行環境，並對每個問題給出修復指令
+wkt help all             列出所有指令（含特殊用途與管理指令）
 ```
+
+**通用工具**（`wkt` 直接列出，也可放進右鍵選單）
 
 | 工具 | 功能 | 預設輸出 |
 |---|---|---|
 | `togif` | 將影片壓成小尺寸 GIF | `input.gif` |
 | `reencode` | 重新編碼成 H.264/AAC | `input_reencoded.mp4` |
-| `tobt709` | BT.601 色域轉 BT.709 | `input_bt709.mp4` |
 | `topng` | `.webp`／`.jpg`／`.bmp` 等圖片轉 PNG | `input.png` |
 | `toframe` | 影片拆幀成 PNG | 同名資料夾 |
+
+**特殊用途**（只在特定規格才會用到，用 `wkt help special` 查看）
+
+| 工具 | 功能 | 預設輸出 |
+|---|---|---|
+| `tobt709` | BT.601 色域轉 BT.709 | `input_bt709.mp4` |
 | `to1080` | 1920x1088 裁成 1920x1080 | `input_1080.ext` |
 | `to1088` | 1920x1080 補成 1920x1088 | `input_1088.ext` |
+
+不加參數執行 `wkt` 只會列出通用工具；`wkt help special` 列出特殊用途、`wkt help manage` 列出管理指令、`wkt help all` 全部列出。特殊工具與管理指令不管有沒有列出，都可以直接輸入使用。
 
 也可以用 `python -m wkt <工具> ...`，效果相同。
 

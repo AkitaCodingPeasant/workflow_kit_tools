@@ -14,6 +14,7 @@ from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 NAME = "togif"
 SUMMARY = "將影片壓成小尺寸 GIF"
+CATEGORY = "general"
 
 DEFAULT_FPS = 10
 DEFAULT_WIDTH = 480

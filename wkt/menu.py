@@ -17,6 +17,7 @@ from wkt.core.errors import WktError
 
 NAME = "menu"
 SUMMARY = "註冊或解除檔案總管右鍵選單（register／unregister／status）"
+CATEGORY = "manage"
 
 APP_KEY = "WorkflowKitTools"
 MENU_LABEL = "WKT"
@@ -52,15 +53,17 @@ def command_line(tool: str) -> str:
 
 def check_menu_config() -> None:
 	"""MENU 引用的工具都必須存在，否則 raise WktError。"""
-	from wkt.registry import tool_names
+	from wkt.registry import DEFAULT_CATEGORY, tool_categories
 
-	known = tool_names()
+	known = tool_categories()
 	for extension, items in MENU.items():
 		if not extension.startswith("."):
 			raise WktError(f"MENU 的副檔名必須以 . 開頭：{extension}")
 		for item in items:
 			if item.tool not in known:
 				raise WktError(f"MENU 引用了不存在的工具：{item.tool}（{extension}）")
+			if known[item.tool] != DEFAULT_CATEGORY:
+				raise WktError(f"MENU 只能放通用工具，{item.tool} 是特殊用途工具（{extension}）")
 
 
 def _delete_tree(winreg, path: str) -> bool:

@@ -44,11 +44,60 @@ def run_cli(*argv: str) -> tuple[int, str, str]:
 
 
 class CliBehaviorTests(unittest.TestCase):
-	def test_no_args_prints_help(self) -> None:
-		code, out, _ = run_cli()
+	GENERAL = ("togif", "toframe", "topng", "reencode")
+	SPECIAL = ("to1080", "to1088", "tobt709")
+	MANAGE = ("menu", "doctor", "install", "dev")
+
+	def assert_listed(self, text: str, names, listed: bool) -> None:
+		import re
+
+		for name in names:
+			found = re.search(rf"^  {name}\s", text, re.M) is not None  # 清單裡的縮排項目，不是說明文字內的提及
+			self.assertEqual(found, listed, f"{name} 在輸出中{'應該' if listed else '不應該'}被列出")
+
+	def test_default_help_lists_only_general_tools(self) -> None:
+		for argv in ((), ("-h",), ("help",), ("help", "general")):
+			with self.subTest(argv=argv):
+				code, out, _ = run_cli(*argv)
+				self.assertEqual(code, 0)
+				self.assert_listed(out, self.GENERAL, True)
+				self.assert_listed(out, self.SPECIAL + self.MANAGE, False)
+				self.assertIn("wkt help special", out)  # 告訴使用者怎麼看其他分類
+				self.assertIn("wkt help manage", out)
+
+	def test_help_special_and_manage_and_all(self) -> None:
+		code, out, _ = run_cli("help", "special")
 		self.assertEqual(code, 0)
-		for name in ("togif", "to1080", "menu"):
-			self.assertIn(name, out)
+		self.assert_listed(out, self.SPECIAL, True)
+		self.assert_listed(out, self.GENERAL + self.MANAGE, False)
+
+		code, out, _ = run_cli("help", "manage")
+		self.assertEqual(code, 0)
+		self.assert_listed(out, self.MANAGE, True)
+		self.assert_listed(out, self.GENERAL + self.SPECIAL, False)
+
+		code, out, _ = run_cli("help", "ALL")  # 不分大小寫
+		self.assertEqual(code, 0)
+		self.assert_listed(out, self.GENERAL + self.SPECIAL + self.MANAGE, True)
+		self.assertNotIn("其他分類", out)
+
+	def test_unknown_help_topic_is_an_error(self) -> None:
+		code, _, err = run_cli("help", "bogus")
+		self.assertEqual(code, 2)
+		self.assertIn("special", err)
+
+	def test_unknown_command_gives_friendly_hint_without_leaking_names(self) -> None:
+		code, _, err = run_cli("nosuchtool")
+		self.assertEqual(code, 2)
+		self.assertIn("未知的指令：nosuchtool", err)
+		self.assertIn("wkt help all", err)
+		for name in self.SPECIAL + self.MANAGE:
+			self.assertNotIn(name, err)
+
+	def test_special_tool_help_works_even_though_unlisted(self) -> None:
+		code, out, _ = run_cli("to1080", "-h")
+		self.assertEqual(code, 0)
+		self.assertIn("1920x1080", out)
 
 	def test_help_word(self) -> None:
 		self.assertEqual(run_cli("help")[0], 0)
@@ -57,9 +106,6 @@ class CliBehaviorTests(unittest.TestCase):
 		code, out, _ = run_cli("togif", "--help")
 		self.assertEqual(code, 0)
 		self.assertIn("--fps", out)
-
-	def test_unknown_tool_is_error(self) -> None:
-		self.assertNotEqual(run_cli("nosuchtool")[0], 0)
 
 	def test_tool_name_is_case_insensitive(self) -> None:
 		self.assertEqual(run_cli("TOGIF", "--help")[0], 0)

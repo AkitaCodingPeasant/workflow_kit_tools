@@ -20,6 +20,7 @@ from wkt.core.errors import WktError
 
 NAME = "dev"
 SUMMARY = "開發用：測試、打包、轉換選單圖示、更新（test／build／icon／update）"
+CATEGORY = "manage"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PORTABLE_OUTPUT = PROJECT_ROOT / "dist" / "WKT-portable.zip"

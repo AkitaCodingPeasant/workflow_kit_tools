@@ -10,6 +10,7 @@ from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 NAME = "reencode"
 SUMMARY = "將影片重新編碼成 H.264/AAC"
+CATEGORY = "general"
 
 TAG = "reencoded"
 

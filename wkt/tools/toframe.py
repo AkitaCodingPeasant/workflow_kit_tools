@@ -12,6 +12,7 @@ from wkt.core.paths import require_input_file
 
 NAME = "toframe"
 SUMMARY = "將影片拆幀成 PNG"
+CATEGORY = "general"
 
 FRAME_PATTERN = "%06d.png"
 FRAME_NAME_RE = re.compile(r"^\d{6}\.png$", re.IGNORECASE)
