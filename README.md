@@ -13,16 +13,20 @@
 
 ## 安裝
 
-雙擊 **`scripts\install.cmd`**，它會：
+雙擊根目錄的 **`install.cmd`**（**這是唯一需要手動點的一步**，之後所有操作都用 `wkt` 指令），它會：
 
 1. 補齊缺少的 Python、ffmpeg（用 `winget`）與 OpenCV（用 `pip`）
 2. 把專案資料夾加入使用者 PATH，讓終端機可直接輸入 `wkt`
 3. 註冊右鍵選單
 4. 執行 `wkt doctor` 確認結果
 
-開始前會列出將要做的事並詢問確認。想先看看環境有沒有問題：`scripts\install.cmd -CheckOnly`（不會修改任何東西）。
+開始前會列出將要做的事並詢問確認。想先看看環境有沒有問題：`install.cmd -CheckOnly` 或 `wkt doctor`（都不會修改任何東西）。
+
+安裝後請**重新開啟終端機**，PATH 才會生效。
 
 ## 使用
+
+管理指令：`wkt doctor`（檢查環境）、`wkt install`（修復安裝）、`wkt menu`（右鍵選單）、`wkt dev`（開發用）。其餘都是處理檔案的工具。
 
 ```
 wkt                      列出所有指令
@@ -48,18 +52,21 @@ wkt doctor               檢查執行環境，並對每個問題給出修復指�
 ## 右鍵選單
 
 ```
-scripts\register_menu.cmd       註冊（.mp4 右鍵 →「顯示更多選項」→ WKT）
-scripts\unregister_menu.cmd     解除
+wkt menu register               註冊（.mp4 右鍵 →「顯示更多選項」→ WKT）
+wkt menu unregister             解除
 wkt menu status                 查看目前是否已註冊
 ```
 
 多選檔案按右鍵只會開**一個**視窗並依序處理；全部成功會顯示結果、3 秒後自動關閉，有失敗則停住讓你看原因。選單圖示使用 `assets/icon.ico`（由 `assets/icon.png` 轉換而來，換圖示請見開發指南）。選單只寫入目前使用者（HKCU）。Windows 11 的選單在第二層「顯示更多選項」，也可按 Shift+F10。
-移動專案資料夾後，請重新執行一次註冊。
+移動專案資料夾後，請重新執行 `wkt menu register`。
 
 ## 開發
 
 新增工具、修改程式、發佈更新，請看 **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**。
 
 ```
-scripts\test.cmd                執行測試
+wkt dev test                     執行測試
+wkt dev build                    產生可攜式安裝包 dist\WKT-portable.zip
+wkt dev update                   測試 → 打包 → 重新註冊選單
+wkt dev icon                     由 assets/icon.png 重新產生選單圖示
 ```

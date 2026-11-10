@@ -123,7 +123,7 @@ def check_menu() -> list[Check]:
 	if menu.ICON.is_file():
 		checks.append(Check("選單圖示", OK, str(menu.ICON)))
 	else:
-		checks.append(Check("選單圖示", WARN, f"找不到 {menu.ICON}", "py -3 scripts\\make_icon.py"))
+		checks.append(Check("選單圖示", WARN, f"找不到 {menu.ICON}", "wkt dev icon"))
 	return checks
 
 
@@ -152,8 +152,8 @@ def check_path() -> Check:
 	if found and _same_path(found, PROJECT_ROOT / "wkt.cmd"):
 		return Check("PATH", OK, "終端機可直接輸入 wkt")
 	if found:
-		return Check("PATH", WARN, f"PATH 中的 wkt 指向別處：{found}", "scripts\\install.cmd")
-	return Check("PATH", WARN, "終端機無法直接輸入 wkt（右鍵選單不受影響）", "scripts\\install.cmd")
+		return Check("PATH", WARN, f"PATH 中的 wkt 指向別處：{found}", "wkt install（或雙擊 install.cmd）")
+	return Check("PATH", WARN, "終端機無法直接輸入 wkt（右鍵選單不受影響）", "雙擊 install.cmd，並重新開啟終端機")
 
 
 def run_checks() -> list[Check]:

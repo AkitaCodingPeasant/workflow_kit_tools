@@ -7,7 +7,7 @@
 	configure_parser(parser) -> None               定義該指令自己的參數
 	run(args: argparse.Namespace) -> None          執行；失敗 raise WktError
 
-wkt/tools/ 下的模組會被自動探索；內建指令（menu、doctor）列在 BUILTIN_MODULES。
+wkt/tools/ 下的模組會被自動探索；內建指令（menu、doctor、install、dev）列在 BUILTIN_MODULES。
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from wkt import tools
 
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9]*$")
-BUILTIN_MODULES = ("wkt.menu", "wkt.doctor")
+BUILTIN_MODULES = ("wkt.menu", "wkt.doctor", "wkt.install", "wkt.dev")
 
 
 def validate_command(module: ModuleType) -> None:

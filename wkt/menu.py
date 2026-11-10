@@ -22,7 +22,7 @@ APP_KEY = "WorkflowKitTools"
 MENU_LABEL = "WKT"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER = PROJECT_ROOT / "wkt.cmd"
-# 選單圖示。registry 的 Icon 不支援 PNG，所以用由 assets/icon.png 產生的 .ico（scripts/make_icon.py）
+# 選單圖示。registry 的 Icon 不支援 PNG，所以用由 assets/icon.png 產生的 .ico（wkt dev icon）
 ICON = PROJECT_ROOT / "assets" / "icon.ico"
 
 
@@ -93,7 +93,7 @@ def register() -> None:
 		raise WktError(f"找不到工具入口：{LAUNCHER}")
 	check_menu_config()
 	if not ICON.is_file():
-		print(f"找不到選單圖示，將不顯示圖示：{ICON}（可執行 scripts\\make_icon.py 產生）", file=sys.stderr)
+		print(f"找不到選單圖示，將不顯示圖示：{ICON}（可執行 wkt dev icon 產生）", file=sys.stderr)
 
 	for extension, items in MENU.items():
 		base = menu_key(extension)
