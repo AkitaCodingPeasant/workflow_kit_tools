@@ -158,6 +158,69 @@ class EndToEndTests(unittest.TestCase):
 		self.assertEqual(code, 0, err)
 		self.assertEqual(source.with_suffix(".png").read_bytes()[:4], b"\x89PNG")
 
+	def test_batch_converts_every_file_and_summarizes(self) -> None:
+		sources = [self._make_image(f"batch{i}.jpg") for i in range(3)]
+		code, out, err = run_cli("topng", *map(str, sources))
+		self.assertEqual(code, 0, err)
+		self.assertIn("完成 3／3", out)
+		for source in sources:
+			self.assertTrue(source.with_suffix(".png").is_file())
+
+	def test_batch_continues_after_a_failure_and_returns_1(self) -> None:
+		good = self._make_image("good.jpg")
+		code, out, err = run_cli("topng", str(self.tmp / "ghost.jpg"), str(good))
+		self.assertEqual(code, 1)
+		self.assertTrue(good.with_suffix(".png").is_file())  # 失敗不影響後面的檔案
+		self.assertIn("完成 1／2", out)
+		self.assertIn("ghost.jpg", err)
+
+	def test_batch_rejects_single_output_for_many_inputs(self) -> None:
+		a, b = self._make_image("o1.jpg"), self._make_image("o2.jpg")
+		code, _, err = run_cli("topng", str(a), str(b), "-o", str(self.tmp / "x.png"))
+		self.assertEqual(code, 1)
+		self.assertIn("不能指定", err)
+
+	def test_probe_duration(self) -> None:
+		from wkt.core.ffmpeg import probe_duration
+
+		self.assertAlmostEqual(probe_duration(FFMPEG, self.video), 1.0, delta=0.2)
+		self.assertIsNone(probe_duration(FFMPEG, self.tmp / "not_there.mp4"))
+
+	def test_progress_bar_renders_on_a_terminal(self) -> None:
+		import contextlib
+		import io
+
+		class FakeTty(io.StringIO):
+			def isatty(self) -> bool:
+				return True
+
+		fake = FakeTty()
+		with contextlib.redirect_stderr(fake):
+			run_ffmpeg(
+				[FFMPEG, "-y", "-i", str(self.video), "-c:v", "libx264", "-preset", "ultrafast", str(self.tmp / "bar.mp4")],
+				duration=1.0,
+			)
+		text = fake.getvalue()
+		self.assertIn("100%", text)  # 進度走到 100%
+		self.assertIn("█", text)
+		self.assertTrue(text.endswith("\r"), "結束時要清掉進度條那一行")
+
+	def test_verbose_flag_shows_ffmpeg_output(self) -> None:
+		from wkt.core import ui
+
+		self.addCleanup(ui.set_verbose, False)
+		code, _, err = run_cli("-v", "reencode", str(self.video), "-o", str(self.tmp / "v.mp4"), "--preset", "ultrafast")
+		self.assertEqual(code, 0, err)
+		self.assertTrue((self.tmp / "v.mp4").is_file())
+
+	def test_failure_shows_ffmpeg_error_text(self) -> None:
+		bad = self.tmp / "garbage.mp4"
+		bad.write_bytes(b"definitely not a video")
+		code, _, err = run_cli("reencode", str(bad))
+		self.assertNotEqual(code, 0)
+		self.assertIn("garbage.mp4", err)  # ffmpeg 的錯誤內容（含檔名）有被轉出來
+		self.assertIn("ffmpeg 結束碼", err)
+
 	def test_ffmpeg_failure_exit_code(self) -> None:
 		bad = self.tmp / "bad.mp4"
 		bad.write_bytes(b"not a video")

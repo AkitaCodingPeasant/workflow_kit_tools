@@ -31,6 +31,7 @@
 4. **純函式優先。** 「組 ffmpeg 指令」、「算輸出路徑」這類邏輯寫成不做 I/O 的函式，才能不靠 ffmpeg 就測試。
 5. **需要才 import。** OpenCV、numpy、winreg 都在函式內才載入，沒用到它們的功能不需要安裝。
 6. **不需要權限。** 所有功能都在使用者層級運作，不寫 HKLM、不裝憑證。
+7. **工具只處理「單一檔案」。** 多檔案、進度、結果畫面都由外層（`wkt.batch`、`wkt.launcher`、`core.ffmpeg`）負責，新工具不需要重複實作。
 
 ## 2. 開發環境
 
@@ -62,18 +63,23 @@ workflow_kit_tools/
 │   ├── __main__.py          讓 `python -m wkt` 可用
 │   ├── cli.py               統一入口：組 argparse、分派、處理錯誤
 │   ├── registry.py          自動探索工具、檢查「指令契約」
-│   ├── menu.py              右鍵選單的設定（MENU）與註冊／解除
+│   ├── batch.py             多檔案批次：逐一執行並彙整成功／失敗
+│   ├── launcher.py          右鍵選單執行階段：多選彙整、結果畫面、失敗停住
+│   ├── menu.py              右鍵選單的設定（MENU）與註冊／解除／狀態
+│   ├── doctor.py            wkt doctor：環境檢查與修復建議
 │   ├── core/                所有工具共用的功能（見第 6 節）
 │   │   ├── errors.py        WktError
+│   │   ├── args.py          共用的命令列參數（輸入檔）
 │   │   ├── paths.py         輸入驗證、輸出路徑規則
-│   │   ├── ffmpeg.py        找 ffmpeg、執行 ffmpeg
+│   │   ├── ffmpeg.py        找 ffmpeg、執行 ffmpeg（含進度條）、讀取影片長度
+│   │   ├── ui.py            進度條、詳細模式、批次標籤
 │   │   └── media.py         OpenCV 逐幀處理流程
 │   └── tools/               ← 每個檔案 = 一個工具
 │       ├── _template.py     新工具範本（底線開頭，不會被載入）
 │       └── togif.py  reencode.py  tobt709.py  toframe.py  to1080.py  to1088.py
 │
 ├── tests/                   單元測試與端對端測試
-├── scripts/                 維護用腳本（註冊選單、測試、打包、更新）
+├── scripts/                 維護用腳本（install、註冊選單、測試、打包、更新）
 ├── docs/                    文件（本檔案）
 ├── assets/                  icon.png（原圖）與 icon.ico（右鍵選單用，由 make_icon.py 產生）
 ├── dist/                    打包輸出（自動產生，不納入版本控制）
@@ -104,14 +110,40 @@ wkt/__main__.py → wkt/cli.py: main()
    │       └ 工具：自動掃描 wkt/tools/*.py（略過 _ 開頭）
    │  每個指令模組變成一個 argparse 子指令（module.configure_parser）
    ▼
-args.handler(args)  =  wkt/tools/togif.py: run(args)
+cli.dispatch(args)
+   │  工具（args.input 是清單）→ wkt/batch.py: run_batch() 逐一呼叫 run()
+   │  內建指令（menu、doctor）→ 直接呼叫 run()
+   ▼
+wkt/tools/togif.py: run(args)        ← 每次只拿到一個檔案（args.input 是字串）
    │  成功：印「完成：…」，回傳 None → 結束碼 0
    │  失敗：raise WktError → cli 印到 stderr，結束碼 = exc.exit_code
 ```
 
+### 多檔案與批次（wkt/batch.py）
+
+- 所有工具的輸入參數都用 `add_input_argument()` 宣告（`nargs="+"`），所以 `wkt togif a.mp4 b.mp4 c.mp4` 可以一次處理多個。
+- 只有一個檔案：行為和以前完全一樣（錯誤直接往上拋、結束碼沿用）。
+- 多個檔案：逐一執行，顯示 `[i/n]`；**某個檔案失敗不會中斷後面的**；最後顯示「完成 x／n」與失敗清單，只要有失敗結束碼就是 1。
+- 多個檔案時不能指定 `-o`／`--output-dir`（會拒絕），輸出放在各檔案旁邊。
+
+### 右鍵選單的執行階段（wkt/launcher.py）
+
+選單登記的指令是 `"wkt.cmd" --from-menu <工具> "%1"`。Explorer 多選 N 個檔案時會**同時啟動 N 個程序**，所以：
+
+```
+N 個程序各自：① 把自己的檔案寫進佇列 %LOCALAPPDATA%\WKT\queue\<工具>\
+              ② 搶「領導者鎖」（msvcrt.locking，程序結束時由作業系統自動釋放）
+搶到的（1 個）：等 0.5 秒收集大家的檔案 → 一次批次處理 → 顯示結果
+沒搶到的（N-1 個）：直接結束，視窗立刻關閉
+```
+
+- **不會漏檔**：每個程序一定是「先登記、再搶鎖」，領導者放開鎖之後會再檢查一次佇列。
+- **結果畫面**：全部成功 → 顯示結果，3 秒後自動關閉；有任何失敗 → 停住顯示原因，按 Enter 才關閉。
+- 進度條：ffmpeg 類工具依影片長度、OpenCV 類工具依幀數顯示；只在互動式終端機顯示，`wkt -v` 或重新導向時不顯示。
+
 ### 指令模組契約
 
-`wkt/tools/` 下的每個模組都必須提供這四個名稱，`registry.validate_command()` 與測試會檢查：
+`wkt/tools/` 下的每個模組（以及內建的 `menu`、`doctor`）都必須提供這四個名稱，`registry.validate_command()` 與測試會檢查：
 
 | 名稱 | 型別 | 說明 |
 |---|---|---|
@@ -193,7 +225,23 @@ WktError(message: str, exit_code: int = 1)
 | 函式 | 用途 |
 |---|---|
 | `find_ffmpeg() -> str` | 依 PATH → WinGet → 常見資料夾的順序找 ffmpeg；找不到 `WktError` |
-| `run_ffmpeg(command, *, stdout=None)` | 執行指令；ffmpeg 失敗時 `WktError`，結束碼沿用 ffmpeg 的 |
+| `run_ffmpeg(command, *, stdout=None, duration=None)` | 執行指令。預設隱藏 ffmpeg 日誌並顯示進度條（`duration` 為輸出總秒數，沒給就不顯示進度）；失敗時印出 ffmpeg 的錯誤並 `WktError`，結束碼沿用 ffmpeg 的；`wkt -v` 下原樣顯示完整輸出 |
+| `probe_duration(ffmpeg_path, input_path) -> float \| None` | 讀取媒體長度（秒）；圖片或讀不到時回傳 `None` |
+| `parse_timecode(text) -> float \| None` | `"3"`、`"00:00:05"`、`"1:02.5"` → 秒數 |
+
+### `core/args.py`
+
+| 函式 | 用途 |
+|---|---|
+| `add_input_argument(parser, help_text)` | 宣告「一個或多個輸入檔」。**所有工具都要用它**，才會自動支援多檔案；`run()` 仍然只會拿到單一檔案 |
+
+### `core/ui.py`
+
+| 名稱 | 用途 |
+|---|---|
+| `Progress(total, label=None)` | 單行進度條；`total` 是 `None` 時不顯示；只在互動式終端機且非詳細模式時顯示。`update(value)`／`close()` |
+| `set_verbose()`／`is_verbose()` | 詳細模式（`wkt -v` 或環境變數 `WKT_VERBOSE=1`） |
+| `set_label(text)` | 批次處理時進度條前面的文字（由 `wkt.batch` 設定，工具不需要碰） |
 
 ### `core/media.py`（OpenCV 逐幀處理）
 
@@ -237,12 +285,12 @@ def build_ffmpeg_command(ffmpeg_path: str, input_path: Path, output_path: Path, 
 
 ```python
 def configure_parser(parser: argparse.ArgumentParser) -> None:
-	parser.add_argument("input", help="輸入影片或音訊路徑")
+	add_input_argument(parser, "輸入影片或音訊路徑")
 	parser.add_argument("-o", "--output", help="輸出路徑；未指定時會使用同層同名 .mp3")
 	parser.add_argument("--bitrate", default=DEFAULT_BITRATE, help=f"MP3 位元率，預設 {DEFAULT_BITRATE}")
 ```
 
-- 輸入檔參數固定叫 `input`，輸出固定是 `-o/--output`（輸出多個檔案時用 `-o/--output-dir`）。
+- 輸入檔一律用 `add_input_argument()`（來自 `wkt.core.args`），不要自己 `add_argument("input")`：這樣才會自動支援多檔案。輸出固定是 `-o/--output`（輸出一個資料夾時用 `-o/--output-dir`）。
 - 每個選項的預設值都要寫在 `help` 裡。
 
 ### 步驟 5：寫 `run`
@@ -253,11 +301,18 @@ def run(args: argparse.Namespace) -> None:
 	output_path = derive_output(input_path, args.output, suffix=".mp3")
 	ensure_not_same(input_path, output_path)
 
-	run_ffmpeg(build_ffmpeg_command(find_ffmpeg(), input_path, output_path, args.bitrate))
+	ffmpeg_path = find_ffmpeg()
+	run_ffmpeg(
+		build_ffmpeg_command(ffmpeg_path, input_path, output_path, args.bitrate),
+		duration=probe_duration(ffmpeg_path, input_path),
+	)
 	print(f"完成：{output_path}")
 ```
 
 這個流程（驗證輸入 → 決定輸出 → 防止覆蓋 → 執行 → 回報）是所有 ffmpeg 類工具的標準骨架。
+
+- `run()` **每次只會拿到一個檔案**（`args.input` 是字串），不要自己寫迴圈；多檔案由 `wkt.batch` 處理。
+- `duration` 讓 `run_ffmpeg` 能顯示進度條。輸出是圖片、沒有「長度」的工具（如 `topng`）可以省略。
 如果是 OpenCV 逐幀類工具，改成呼叫 `run_frame_tool`（見 `to1080.py`）。
 
 ### 步驟 6：寫測試
@@ -346,9 +401,12 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 | 檔案 | 測什麼 | 需要 ffmpeg／OpenCV |
 |---|---|---|
 | `tests/test_registry.py` | 指令契約、名稱不重複、`MENU` 引用的工具存在、`_template.py` 合規 | 否 |
-| `tests/test_core.py` | `core/paths.py` 的規則 | 否 |
+| `tests/test_core.py` | `core/paths.py` 的規則、時間碼解析、進度條 | 否 |
+| `tests/test_batch.py` | 批次執行：單檔／多檔／失敗不中斷／`-o` 衝突 | 否 |
+| `tests/test_doctor.py` | `wkt doctor` 的檢查與結束碼 | 否 |
 | `tests/test_commands.py` | 各工具「組 ffmpeg 指令」的純函式 | 否 |
-| `tests/test_cli.py` | CLI 行為、各工具端對端（用 ffmpeg 即時產生測試影片） | 是，沒裝會自動略過 |
+| `tests/test_cli.py` | CLI 行為、各工具端對端、批次、進度條（用 ffmpeg 即時產生測試影片） | 是，沒裝會自動略過 |
+| `tests/test_launcher.py` | 佇列、領導者鎖；實際同時啟動多個程序，驗證只有一個負責處理（約 8 秒） | 部分需要 ffmpeg |
 
 撰寫原則：
 
@@ -372,17 +430,20 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 **在其他電腦安裝**：
 
 1. 解壓縮到固定資料夾（之後不要搬動）。
-2. 確認有 Python 3.10+ 與 ffmpeg；需要 `to1080`／`to1088` 就 `pip install -r requirements.txt`。
-3. 雙擊 `scripts\register_menu.cmd`。
+2. 雙擊 `scripts\install.cmd`。它會依序：補齊 Python 與 ffmpeg（`winget`）和 OpenCV（`pip`）→ 把專案資料夾加入使用者 PATH → 註冊右鍵選單 → 執行 `wkt doctor` 確認。開始前會列出將要做的事並詢問確認。
 
-**更新其他電腦**：覆蓋解壓縮到原位置即可。選單設定（`MENU`）有變動時，再執行一次 `scripts\register_menu.cmd`。只改工具邏輯不需要重新註冊。
+`install.cmd` 的參數：`-CheckOnly`（只檢查，不改任何東西）、`-Yes`（不詢問）、`-NoPath`（不改 PATH）、`-NoMenu`（不註冊選單）。
+沒有 `winget` 的電腦（舊版 Windows 10）請手動安裝 Python、ffmpeg 後再執行。剛用 winget 裝好的程式，若目前視窗還找不到，請關掉視窗重新執行一次。
+
+**更新其他電腦**：覆蓋解壓縮到原位置即可。選單設定（`MENU`）或選單指令格式有變動時，再執行一次 `scripts\register_menu.cmd`（`wkt doctor` 會在選單設定過舊時提醒）。只改工具邏輯不需要重新註冊。
 
 ## 12. 右鍵選單的限制與設計決策
 
 - **只有第二層（傳統選單）。** 原因：Windows 11 的第一層新式選單需要「套件身分」，也就是簽章的 MSIX 套件。這代表要建立自簽憑證、把它加入整台電腦的信任清單、並依賴特定版本的 Windows SDK 工具，部署與散布都複雜，也有安全顧慮。本專案已決定不採用，並移除所有相關程式。若未來要重新評估，需要正式的程式碼簽章憑證。
 - **只寫入 HKCU**：`HKCU\Software\Classes\SystemFileAssociations\<副檔名>\shell\WorkflowKitTools`。不需要管理員權限，也只影響目前使用者。
 - **選單圖示**：registry 的 `Icon` 不支援 PNG，只吃 `.ico`／exe／dll。圖示的來源是 `assets/icon.png`，由 `scripts/make_icon.py` 轉成 `assets/icon.ico`（含 16～256px 多種尺寸，透明底、圖案置中）。**更換圖示的步驟**：換掉 `assets/icon.png` → `py -3 scripts\make_icon.py` → `wkt menu register`。`icon.ico` 要一併保留，因為註冊時直接使用它，不需要 OpenCV。
-- **路徑是絕對路徑**：選單指令寫死了 `wkt.cmd` 的位置，所以專案資料夾移動後要重新註冊。
+- **路徑是絕對路徑**：選單指令寫死了 `wkt.cmd` 的位置，所以專案資料夾移動後要重新註冊。`wkt menu status`／`wkt doctor` 會區分兩種狀況：**設定較舊**（指令格式更新，舊指令仍可用，只是警告）與**位置不存在**（資料夾被搬走，選單已失效，視為失敗）。
+- **多選與結果畫面**見第 4 節「右鍵選單的執行階段」。這套機制只在選單指令（`--from-menu`）啟用；在終端機直接執行 `wkt` 時不會有 0.5 秒的收集等待，也不會有自動關閉的倒數。
 - **解除安裝**：`wkt menu unregister`（或 `scripts\unregister_menu.cmd`），再刪除專案資料夾即可，沒有其他殘留。
 
 ## 13. 疑難排解
@@ -395,7 +456,11 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 | 找不到 ffmpeg | 安裝 ffmpeg（例如 `winget install Gyan.FFmpeg`）並重新開啟終端機，使 PATH 生效 |
 | `缺少 opencv-python` | `pip install -r requirements.txt` |
 | 尺寸必須是 1920x1088 | `to1080` 只接受 1920x1088；`to1088` 只接受 1920x1080 |
-| 從選單執行時視窗一閃而過 | 在終端機直接執行同一個指令，就能看到完整訊息 |
+| 從選單執行時視窗一閃而過 | 全部成功時會顯示結果、3 秒後自動關閉；失敗則會停住等你按 Enter。若連失敗都一閃而過，先執行 `wkt doctor`，再在終端機直接執行同一個指令查看 |
+| 不確定環境哪裡有問題 | 執行 `wkt doctor`：逐項檢查並附修復指令；`scripts\install.cmd -CheckOnly` 效果相同 |
+| 沒有看到進度條 | 進度條只在互動式終端機顯示；使用了 `-v`、或輸出被重新導向時不會顯示 |
+| 想看 ffmpeg 完整輸出 | `wkt -v <工具> ...`，或設定環境變數 `WKT_VERBOSE=1` |
+| 多選檔案時有些檔案沒處理 | 先看結果視窗的「失敗的檔案」清單；多選時所有檔案由同一個視窗處理，不會每個檔案各開一個 |
 | 看到簡短錯誤想知道細節 | `set WKT_DEBUG=1` 後重跑，會顯示完整 traceback |
 | `ValueError: ... NAME 必須是…` | 新工具不符合指令契約，見第 4 節 |
 | `ValueError: 指令名稱重複` | 兩個模組的 `NAME` 相同，改掉其中一個 |
@@ -409,6 +474,8 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - [ ] 錯誤一律 `raise WktError`，沒有 `sys.exit` 或自己 `return 1`
 - [ ] 沒有在檔案頂端 `import cv2` / `numpy` / `winreg`
 - [ ] 沒有寫死 `"ffmpeg"`（使用 `find_ffmpeg()`）
+- [ ] 輸入參數用 `add_input_argument()`，`run()` 沒有自己處理多檔案迴圈
+- [ ] 修改選單指令格式時，確認 `wkt doctor` 會提示舊註冊「設定較舊」，並調整版本號
 - [ ] `README.md` 的工具表與本文件已同步
 - [ ] 預設值／參數／輸出檔名有變動時，已調整 `__version__`
 - [ ] 檔案為 UTF-8，`.py` 用 Tab 縮排
@@ -437,5 +504,13 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - `togif` 失敗時會清掉暫存檔。
 - 指令名稱仍不分大小寫；原本用來去除舊檔名前綴的相容寫法（`wkt toimg` 等）已移除。
 - `wkt menu register` 會先清除該副檔名舊的選單項目再寫入。
+
+**v1.2.0 的變更**（UX 優化）：
+
+- 所有工具接受多個輸入檔；右鍵多選只開一個視窗並顯示 `[i/n]`。
+- ffmpeg 預設只顯示進度條，失敗時才印出 ffmpeg 的錯誤；`wkt -v` 恢復完整輸出。
+- 選單執行：全部成功自動關閉、有失敗就停住。選單登記的指令多了 `--from-menu`，**升級後要重新註冊**（`wkt doctor` 會提醒）。
+- 新增 `wkt doctor` 與 `scripts\install.cmd`。
+- 找不到 ffmpeg 的訊息現在附上安裝指令。
 
 舊檔案的完整備份在 `archive/pre-refactor-backup.zip`。

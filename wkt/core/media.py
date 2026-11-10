@@ -11,6 +11,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from wkt.core import ui
+from wkt.core.args import add_input_argument
 from wkt.core.errors import WktError
 from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
@@ -105,11 +107,18 @@ def transform_video(
 		if not writer.isOpened():
 			raise WktError(f"無法建立輸出影片：{output_path}")
 
-		while True:
-			ok, frame = capture.read()
-			if not ok:
-				break
-			writer.write(frame_fn(frame))
+		progress = ui.Progress(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+		done = 0
+		try:
+			while True:
+				ok, frame = capture.read()
+				if not ok:
+					break
+				writer.write(frame_fn(frame))
+				done += 1
+				progress.update(done)
+		finally:
+			progress.close()
 	finally:
 		capture.release()
 		if writer is not None:
@@ -118,7 +127,7 @@ def transform_video(
 
 def add_media_arguments(parser: argparse.ArgumentParser, tag: str) -> None:
 	"""圖片／影片逐幀工具共用的參數：input、-o、--type。"""
-	parser.add_argument("input", help="輸入圖片或影片路徑")
+	add_input_argument(parser, "輸入圖片或影片路徑")
 	parser.add_argument("-o", "--output", help=f"輸出路徑；未指定時會自動加上 _{tag}")
 	parser.add_argument("--type", choices=MEDIA_TYPES, default="auto", help="指定媒體類型，預設 auto")
 

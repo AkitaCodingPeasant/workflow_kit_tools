@@ -20,6 +20,8 @@ EXTRA_FILES = (
 	"assets/icon.png",
 	"assets/icon.ico",
 	"scripts/make_icon.py",
+	"scripts/install.cmd",
+	"scripts/install.ps1",
 	"scripts/register_menu.cmd",
 	"scripts/unregister_menu.cmd",
 )

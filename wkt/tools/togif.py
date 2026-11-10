@@ -7,7 +7,8 @@ import uuid
 from pathlib import Path
 
 from wkt.core.errors import WktError
-from wkt.core.ffmpeg import find_ffmpeg, run_ffmpeg
+from wkt.core.args import add_input_argument
+from wkt.core.ffmpeg import find_ffmpeg, parse_timecode, probe_duration, run_ffmpeg
 from wkt.core.paths import derive_output, ensure_not_same, require_input_file
 
 
@@ -88,8 +89,19 @@ def pick_writable_output_path(output_path: Path) -> tuple[Path, str | None]:
 		return fallback_path, f"無法寫入原輸出資料夾，改輸出到暫存資料夾：{exc}"
 
 
+def expected_duration(ffmpeg_path: str, input_path: Path, args: argparse.Namespace) -> float | None:
+	"""輸出的預期長度（秒），用來顯示進度；有 --duration 以它為準，否則為「全長 − --start」。"""
+	trimmed = parse_timecode(args.duration)
+	if trimmed:
+		return trimmed
+	total = probe_duration(ffmpeg_path, input_path)
+	if total is None:
+		return None
+	return max(total - (parse_timecode(args.start) or 0.0), 0.0) or None
+
+
 def configure_parser(parser: argparse.ArgumentParser) -> None:
-	parser.add_argument("input", help="輸入影片路徑")
+	add_input_argument(parser, "輸入影片路徑")
 	parser.add_argument("-o", "--output", help="輸出 GIF 路徑；未指定時會使用同層同名 .gif")
 	parser.add_argument("--fps", type=int, default=DEFAULT_FPS, help=f"GIF fps，預設 {DEFAULT_FPS}")
 	parser.add_argument("--width", type=int, default=DEFAULT_WIDTH, help=f"最大寬度，預設 {DEFAULT_WIDTH}")
@@ -125,7 +137,7 @@ def run(args: argparse.Namespace) -> None:
 	)
 	try:
 		with temp_output_path.open("wb") as output_file:
-			run_ffmpeg(command, stdout=output_file)
+			run_ffmpeg(command, stdout=output_file, duration=expected_duration(ffmpeg_path, input_path, args))
 		output_path.unlink(missing_ok=True)
 		temp_output_path.replace(output_path)
 	finally:

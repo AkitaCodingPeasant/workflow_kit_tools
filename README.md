@@ -11,12 +11,26 @@
 
 不需要管理員權限，也不需要憑證或簽章。
 
+## 安裝
+
+雙擊 **`scripts\install.cmd`**，它會：
+
+1. 補齊缺少的 Python、ffmpeg（用 `winget`）與 OpenCV（用 `pip`）
+2. 把專案資料夾加入使用者 PATH，讓終端機可直接輸入 `wkt`
+3. 註冊右鍵選單
+4. 執行 `wkt doctor` 確認結果
+
+開始前會列出將要做的事並詢問確認。想先看看環境有沒有問題：`scripts\install.cmd -CheckOnly`（不會修改任何東西）。
+
 ## 使用
 
 ```
 wkt                      列出所有指令
 wkt <工具> --help        查看某個工具的參數
 wkt togif input.mp4      範例：影片轉 GIF
+wkt togif a.mp4 b.mp4    一次處理多個檔案（顯示 [1/2]…並彙整成功／失敗）
+wkt -v reencode a.mp4    顯示 ffmpeg 的完整輸出（預設只顯示進度條）
+wkt doctor               檢查執行環境，並對每個問題給出修復指令
 ```
 
 | 工具 | 功能 | 預設輸出 |
@@ -39,7 +53,7 @@ scripts\unregister_menu.cmd     解除
 wkt menu status                 查看目前是否已註冊
 ```
 
-選單圖示使用 `assets/icon.ico`（由 `assets/icon.png` 轉換而來，換圖示請見開發指南）。選單只寫入目前使用者（HKCU）。Windows 11 的選單在第二層「顯示更多選項」，也可按 Shift+F10。
+多選檔案按右鍵只會開**一個**視窗並依序處理；全部成功會顯示結果、3 秒後自動關閉，有失敗則停住讓你看原因。選單圖示使用 `assets/icon.ico`（由 `assets/icon.png` 轉換而來，換圖示請見開發指南）。選單只寫入目前使用者（HKCU）。Windows 11 的選單在第二層「顯示更多選項」，也可按 Shift+F10。
 移動專案資料夾後，請重新執行一次註冊。
 
 ## 開發
