@@ -120,7 +120,7 @@ def build_parser(visible: Sequence[str] = (DEFAULT_CATEGORY,)) -> argparse.Argum
 			formatter_class=argparse.RawDescriptionHelpFormatter,
 		)
 		module.configure_parser(sub)
-		sub.set_defaults(handler=module.run, tool_name=module.NAME)
+		sub.set_defaults(handler=module.run, planner=getattr(module, "plan", None), tool_name=module.NAME)
 	return parser
 
 

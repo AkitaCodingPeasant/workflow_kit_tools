@@ -61,6 +61,8 @@ def discover_tools() -> list[ModuleType]:
 			continue
 		module = importlib.import_module(f"{tools.__name__}.{info.name}")
 		validate_command(module)
+		if not callable(getattr(module, "plan", None)):
+			raise ValueError(f"{module.__name__}: 缺少函式 plan()（用於 --dry-run）")
 		if module.CATEGORY == MANAGE_CATEGORY:
 			raise ValueError(f"{module.__name__}: 工具不能使用 {MANAGE_CATEGORY} 分類（那是內建指令專用）")
 		modules.append(module)

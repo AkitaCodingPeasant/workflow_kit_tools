@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
+import contextlib
+import io
 import unittest
 from pathlib import Path
 
+from wkt.core.errors import WktError
+from wkt.core.profiles import apply_profile
 from wkt.tools import reencode, toframe, togif, tobt709, topng
 
 
@@ -53,6 +58,69 @@ class CommandTests(unittest.TestCase):
 		self.assertIn("fps=12", video_filter)
 		self.assertIn("320", video_filter)
 		self.assertIn("max_colors=64", video_filter)
+
+
+def togif_args(*argv: str) -> argparse.Namespace:
+	parser = argparse.ArgumentParser()
+	togif.configure_parser(parser)
+	args = parser.parse_args([str(SRC), *argv])
+	apply_profile(args, togif.PROFILES, togif.DEFAULT_PROFILE)
+	return args
+
+
+class TogifProfileTests(unittest.TestCase):
+	def test_default_is_standard(self) -> None:
+		args = togif_args()
+		self.assertEqual((args.fps, args.width, args.colors), (10, 480, 96))
+
+	def test_profile_applies_all_values(self) -> None:
+		args = togif_args("--profile", "small")
+		self.assertEqual((args.fps, args.width, args.colors), (8, 320, 64))
+
+	def test_explicit_option_overrides_profile(self) -> None:
+		args = togif_args("-p", "small", "--fps", "15")
+		self.assertEqual((args.fps, args.width, args.colors), (15, 320, 64))
+
+	def test_explicit_value_equal_to_default_still_wins(self) -> None:
+		args = togif_args("--profile", "high", "--fps", "10")
+		self.assertEqual(args.fps, 10)
+
+	def test_unknown_profile_is_rejected(self) -> None:
+		with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+			togif_args("--profile", "huge")
+
+
+class TogifMaxSizeTests(unittest.TestCase):
+	def test_parse_size(self) -> None:
+		self.assertEqual(togif.parse_size("8MB"), 8 * 1024**2)
+		self.assertEqual(togif.parse_size("500k"), 500 * 1024)
+		self.assertEqual(togif.parse_size("2.5 m"), int(2.5 * 1024**2))
+
+	def test_parse_size_rejects_bad_input(self) -> None:
+		for text in ("8", "abc", "-1MB", "0KB", ""):
+			with self.subTest(text=text), self.assertRaises(WktError):
+				togif.parse_size(text)
+
+	def test_validate_rejects_bad_max_size(self) -> None:
+		with self.assertRaises(WktError):
+			togif.validate_args(togif_args("--max-size", "big"))
+
+	def test_next_settings_shrinks_width_first(self) -> None:
+		fps, width, colors = togif.next_settings(10, 480, 96, actual=4_000_000, target=1_000_000)
+		self.assertEqual(fps, 10)
+		self.assertEqual(colors, 96)
+		self.assertLess(width, 480)
+		self.assertEqual(width % 2, 0)
+
+	def test_next_settings_then_fps_then_colors_then_gives_up(self) -> None:
+		fps, width, colors = togif.next_settings(10, togif.MIN_WIDTH, 96, 2_000_000, 1_000_000)
+		self.assertEqual((width, colors), (togif.MIN_WIDTH, 96))
+		self.assertLess(fps, 10)
+		_, _, colors = togif.next_settings(togif.MIN_FPS, togif.MIN_WIDTH, 96, 2_000_000, 1_000_000)
+		self.assertEqual(colors, 48)
+		self.assertIsNone(
+			togif.next_settings(togif.MIN_FPS, togif.MIN_WIDTH, togif.MIN_COLORS, 2_000_000, 1_000_000)
+		)
 
 
 if __name__ == "__main__":

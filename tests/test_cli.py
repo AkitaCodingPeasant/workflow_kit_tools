@@ -123,6 +123,36 @@ class CliBehaviorTests(unittest.TestCase):
 	def test_version(self) -> None:
 		self.assertEqual(run_cli("--version")[0], 0)
 
+	def test_dry_run_previews_paths_without_media_dependencies(self) -> None:
+		with tempfile.TemporaryDirectory() as raw:
+			root = Path(raw)
+			source = root / "sample.mp4"
+			source.write_bytes(b"placeholder")
+			destination = root / "output"
+			code, out, err = run_cli("reencode", str(source), "--out-dir", str(destination), "--dry-run")
+			self.assertEqual(code, 0, err)
+			self.assertIn(str(destination / "sample_reencoded.mp4"), out)
+			self.assertIn("新增", out)
+			self.assertFalse(destination.exists())
+
+			(destination).mkdir()
+			(destination / "sample_reencoded.mp4").write_bytes(b"keep")
+			code, out, _ = run_cli("reencode", str(source), "--out-dir", str(destination), "--dry-run")
+			self.assertEqual(code, 1)
+			self.assertIn("衝突", out)
+			code, out, err = run_cli("reencode", str(source), "--out-dir", str(destination), "--dry-run", "--force")
+			self.assertEqual(code, 0, err)
+			self.assertIn("覆蓋", out)
+			self.assertEqual((destination / "sample_reencoded.mp4").read_bytes(), b"keep")
+
+	def test_dry_run_rejects_conflicting_output_options(self) -> None:
+		with tempfile.TemporaryDirectory() as raw:
+			source = Path(raw) / "sample.jpg"
+			source.write_bytes(b"placeholder")
+			code, _, err = run_cli("topng", str(source), "-o", str(source.with_suffix(".png")), "--out-dir", raw, "--dry-run")
+			self.assertEqual(code, 1)
+			self.assertIn("不能同時指定", err)
+
 
 @unittest.skipUnless(FFMPEG, "需要 ffmpeg")
 class EndToEndTests(unittest.TestCase):
@@ -147,6 +177,26 @@ class EndToEndTests(unittest.TestCase):
 		self.assertTrue(gif.is_file() and gif.stat().st_size > 0)
 		self.assertEqual(gif.read_bytes()[:3], b"GIF")
 		self.assertEqual([p.name for p in self.tmp.glob(".*.tmp.gif")], [])  # 暫存檔已清掉
+
+	def test_togif_profile_and_max_size(self) -> None:
+		plain = self.tmp / "plain.gif"
+		small = self.tmp / "small.gif"
+		code, _, err = run_cli("togif", str(self.video), "-o", str(plain), "--profile", "high")
+		self.assertEqual(code, 0, err)
+		limit = plain.stat().st_size // 2
+		code, _, err = run_cli(
+			"togif", str(self.video), "-o", str(small), "--profile", "high", "--max-size", f"{limit}b"
+		)
+		self.assertEqual(code, 0, err)
+		self.assertLessEqual(small.stat().st_size, limit)
+
+	def test_togif_max_size_impossible_keeps_no_output(self) -> None:
+		target = self.tmp / "impossible.gif"
+		code, _, err = run_cli("togif", str(self.video), "-o", str(target), "--max-size", "1b")
+		self.assertEqual(code, 1)
+		self.assertIn("無法壓到", err)
+		self.assertFalse(target.exists())
+		self.assertEqual([p.name for p in self.tmp.glob(".*.tmp.gif")], [])
 
 	def test_reencode(self) -> None:
 		code, _, err = run_cli("reencode", str(self.video), "--preset", "ultrafast")
@@ -216,6 +266,19 @@ class EndToEndTests(unittest.TestCase):
 		self.assertIn("完成 3／3", out)
 		for source in sources:
 			self.assertTrue(source.with_suffix(".png").is_file())
+
+	def test_batch_out_dir_and_force(self) -> None:
+		sources = [self._make_image(f"dest{i}.jpg") for i in range(2)]
+		out_dir = self.tmp / "output"
+		code, _, err = run_cli("topng", *map(str, sources), "--out-dir", str(out_dir))
+		self.assertEqual(code, 0, err)
+		outputs = [out_dir / f"dest{i}.png" for i in range(2)]
+		self.assertTrue(all(path.is_file() for path in outputs))
+		code, _, err = run_cli("topng", *map(str, sources), "--out-dir", str(out_dir))
+		self.assertEqual(code, 1)
+		self.assertIn("已存在", err)
+		code, _, err = run_cli("topng", *map(str, sources), "--out-dir", str(out_dir), "--force")
+		self.assertEqual(code, 0, err)
 
 	def test_batch_continues_after_a_failure_and_returns_1(self) -> None:
 		good = self._make_image("good.jpg")

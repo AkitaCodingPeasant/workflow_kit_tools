@@ -5,7 +5,7 @@ from pathlib import Path
 
 from wkt.core.args import add_input_argument
 from wkt.core.ffmpeg import find_ffmpeg, probe_duration, run_ffmpeg
-from wkt.core.paths import derive_output, ensure_not_same, require_input_file
+from wkt.core.paths import derive_output, ensure_not_same, ensure_output_available, require_input_file
 
 
 NAME = "tobt709"
@@ -72,10 +72,18 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
 	parser.add_argument("--preset", default="medium", help="x264 preset，預設 medium")
 
 
-def run(args: argparse.Namespace) -> None:
+def plan(args: argparse.Namespace) -> Path:
 	input_path = require_input_file(args.input)
-	output_path = derive_output(input_path, args.output, tag=TAG)
+	output_path = derive_output(input_path, args.output, tag=TAG, out_dir=args.out_dir)
 	ensure_not_same(input_path, output_path)
+	ensure_output_available(output_path, args.force)
+	return output_path
+
+
+def run(args: argparse.Namespace) -> None:
+	output_path = plan(args)
+	input_path = require_input_file(args.input)
+	output_path.parent.mkdir(parents=True, exist_ok=True)
 
 	ffmpeg_path = find_ffmpeg()
 	command = build_ffmpeg_command(
