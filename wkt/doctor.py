@@ -105,6 +105,19 @@ def check_opencv() -> Check:
 	return Check("OpenCV／numpy", OK, "、".join(versions))
 
 
+def check_questionary() -> Check:
+	try:
+		import questionary
+	except ImportError:
+		return Check(
+			"questionary",
+			WARN,
+			"未安裝（只有互動選單需要；wkt 其他功能不受影響）",
+			"py -3 -m pip install -r requirements.txt",
+		)
+	return Check("questionary", OK, f"questionary {questionary.__version__}")
+
+
 def check_menu() -> list[Check]:
 	from wkt import menu
 
@@ -158,7 +171,7 @@ def check_path() -> Check:
 
 
 def run_checks() -> list[Check]:
-	checks = [check_python(), check_ffmpeg(), check_opencv()]
+	checks = [check_python(), check_ffmpeg(), check_opencv(), check_questionary()]
 	checks.extend(check_menu())
 	checks.append(check_path())
 	return checks

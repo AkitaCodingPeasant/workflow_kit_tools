@@ -7,7 +7,7 @@
 - Windows 10／11
 - Python 3.10 以上（`py -3` 可執行）
 - [FFmpeg](https://ffmpeg.org/)（`ffmpeg` 可在命令列執行，或以 WinGet 安裝）
-- 只有 `to1080`、`to1088` 需要 OpenCV：`pip install -r requirements.txt`
+- 只有 `to1080`、`to1088` 需要 OpenCV；互動選單需要 questionary：`pip install -r requirements.txt`
 
 不需要管理員權限，也不需要憑證或簽章。
 
@@ -25,6 +25,8 @@
 安裝後請**重新開啟終端機**，PATH 才會生效。
 
 ## 使用
+
+直接輸入 `wkt`（不帶任何參數）會開啟互動選單：選工具 → 貼上路徑或從資料夾挑選檔案 → 調整參數 → 預覽或執行，並顯示等同的命令列指令。畫面上按 Esc 返回上一層、Ctrl+C 離開。不想開選單時用 `wkt --no-tui` 或設定環境變數 `WKT_NO_TUI=1`；輸出被導向或在腳本中執行時不會開啟選單。
 
 管理指令：`wkt doctor`（檢查環境，並對每個問題給出修復指令）、`wkt install`（修復安裝）、`wkt menu`（右鍵選單）、`wkt dev`（開發用）。其餘都是處理檔案的工具。
 

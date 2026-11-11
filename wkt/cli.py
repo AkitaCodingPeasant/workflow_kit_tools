@@ -22,6 +22,7 @@ from wkt import __version__
 from wkt.batch import is_batchable, run_batch
 from wkt.core import ui
 from wkt.core.errors import WktError
+from wkt.tui import NO_TUI_ENV
 from wkt.registry import CATEGORIES, DEFAULT_CATEGORY, group_by_category, load_commands
 
 
@@ -30,7 +31,7 @@ MENU_FLAG = "--from-menu"  # 右鍵選單專用：見 wkt/launcher.py
 HELP_ALL = "all"
 INVALID_CHOICE_RE = re.compile(r"invalid choice: '([^']*)'")
 
-USAGE = "wkt [-h] [--version] [-v] <指令> ..."
+USAGE = "wkt [-h] [--version] [-v] [--no-tui] <指令> ..."
 
 # 說明底下的範例跟著分類走；同時顯示多個分類（help all）時用通用工具的範例
 EXAMPLES = {
@@ -111,6 +112,7 @@ def build_parser(visible: Sequence[str] = (DEFAULT_CATEGORY,)) -> argparse.Argum
 		action="store_true",
 		help=f"顯示 ffmpeg 的完整輸出，不顯示進度條（也可設定環境變數 {ui.VERBOSE_ENV}=1）",
 	)
+	parser.add_argument("--no-tui", action="store_true", help=f"不開啟互動選單，改印說明（也可設定環境變數 {NO_TUI_ENV}=1）")
 	# 指令清單由上面的 description 負責顯示（含分類），所以子指令本身不列在 argparse 的清單裡
 	subparsers = parser.add_subparsers(dest="command", metavar="<指令>", help=argparse.SUPPRESS)
 	for module in (*tools, *builtins):
@@ -160,6 +162,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 		raw_args[0] = raw_args[0].lower()  # 指令名稱不分大小寫
 
 	if not raw_args:
+		from wkt import tui
+
+		if tui.should_launch_tui(raw_args):
+			return tui.run_tui()
 		build_parser().print_help()
 		return 0
 	if raw_args[0] == "help":
