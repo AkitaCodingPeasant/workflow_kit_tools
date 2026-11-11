@@ -33,8 +33,14 @@ wkt                      列出所有指令
 wkt <工具> --help        查看某個工具的參數
 wkt togif input.mp4      範例：影片轉 GIF
 wkt togif a.mp4 b.mp4    一次處理多個檔案（顯示 [1/2]…並彙整成功／失敗）
+wkt togif --profile small a.mp4          用預設組（small／standard／high）省去反覆輸入 --fps／--width／--colors
+wkt togif -p small --fps 12 a.mp4        單項參數會覆寫預設組的對應值
+wkt togif --max-size 8MB a.mp4           超過上限時自動縮小寬度、降低 fps、減少顏色後重試
 wkt -v reencode a.mp4    顯示 ffmpeg 的完整輸出（預設只顯示進度條）
 wkt help all             列出所有指令（含特殊用途與管理指令）
+wkt topng a.jpg b.webp --out-dir D:\output    批次輸出到指定資料夾
+wkt reencode a.mp4 --dry-run              預覽輸出路徑，不執行
+wkt reencode a.mp4 --force                覆蓋既有輸出
 ```
 
 **通用工具**（`wkt` 直接列出，也可放進右鍵選單）
@@ -57,6 +63,12 @@ wkt help all             列出所有指令（含特殊用途與管理指令）
 不加參數執行 `wkt` 只會列出通用工具；`wkt help special` 列出特殊用途、`wkt help manage` 列出管理指令、`wkt help all` 全部列出。特殊工具與管理指令不管有沒有列出，都可以直接輸入使用。
 
 也可以用 `python -m wkt <工具> ...`，效果相同。
+
+所有檔案處理工具都支援 `--out-dir`、`--dry-run` 與 `--force`。預設輸出在來源旁；指定 `--out-dir` 後，輸出改放在該資料夾。`toframe` 會在其中建立來源同名的子資料夾。`--out-dir` 可搭配多個輸入，`-o` 則只供單檔使用，兩者不能同時指定。
+
+輸出已存在時，預設拒絕覆蓋；加上 `--force` 才覆蓋。`--dry-run` 會顯示每個輸入的輸出路徑與「新增／覆蓋／衝突」狀態，不會建立資料夾或啟動轉檔；有衝突時結束碼為 1。若不同輸入會寫到同一路徑，整批會在處理前拒絕，例如兩個不同資料夾中的 `a.jpg` 同時輸出到同一個 `--out-dir`。
+
+`toframe --force` 會清除輸出資料夾內既有的六位數 PNG 拆幀檔，再重新產生；若資料夾內有其他檔案，會拒絕執行，避免刪到無關資料。
 
 ## 右鍵選單
 

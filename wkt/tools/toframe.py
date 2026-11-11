@@ -7,7 +7,7 @@ from pathlib import Path
 from wkt.core.args import add_input_argument
 from wkt.core.errors import WktError
 from wkt.core.ffmpeg import find_ffmpeg, probe_duration, run_ffmpeg
-from wkt.core.paths import require_input_file
+from wkt.core.paths import ensure_output_available, require_input_file
 
 
 NAME = "toframe"
@@ -18,20 +18,25 @@ FRAME_PATTERN = "%06d.png"
 FRAME_NAME_RE = re.compile(r"^\d{6}\.png$", re.IGNORECASE)
 
 
-def build_output_dir(input_path: Path, output_arg: str | None) -> Path:
+def build_output_dir(input_path: Path, output_arg: str | None, out_dir: str | None = None) -> Path:
+	if output_arg and out_dir:
+		raise WktError("-o／--output-dir 與 --out-dir 不能同時指定")
 	if output_arg:
 		return Path(output_arg).expanduser()
+	if out_dir:
+		return Path(out_dir).expanduser() / input_path.stem
 	return input_path.with_name(input_path.stem)
 
 
-def ensure_output_dir(output_dir: Path) -> None:
-	if output_dir.exists():
-		if not output_dir.is_dir():
-			raise WktError(f"輸出路徑已存在但不是資料夾：{output_dir}")
-		if any(output_dir.iterdir()):
-			raise WktError(f"輸出資料夾已存在且不是空的：{output_dir}")
-	else:
-		output_dir.mkdir(parents=True)
+def ensure_output_dir(output_dir: Path, force: bool = False) -> None:
+	ensure_output_available(output_dir, force, directory=True)
+	if force and output_dir.exists():
+		unrelated = [path for path in output_dir.iterdir() if not path.is_file() or not FRAME_NAME_RE.match(path.name)]
+		if unrelated:
+			raise WktError(f"輸出資料夾含有非拆幀檔案，無法安全覆蓋：{output_dir}")
+		for path in output_dir.iterdir():
+			path.unlink()
+	output_dir.mkdir(parents=True, exist_ok=True)
 
 
 def build_ffmpeg_command(
@@ -81,12 +86,23 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
 	)
 
 
-def run(args: argparse.Namespace) -> None:
+def plan(args: argparse.Namespace) -> Path:
 	input_path = require_input_file(args.input)
-	output_dir = build_output_dir(input_path, args.output_dir)
+	output_dir = build_output_dir(input_path, args.output_dir, args.out_dir)
+	ensure_output_available(output_dir, args.force, directory=True)
+	if args.force and output_dir.exists() and any(
+		(not path.is_file() or not FRAME_NAME_RE.match(path.name)) for path in output_dir.iterdir()
+	):
+		raise WktError(f"輸出資料夾含有非拆幀檔案，無法安全覆蓋：{output_dir}")
+	return output_dir
+
+
+def run(args: argparse.Namespace) -> None:
+	output_dir = plan(args)
+	input_path = require_input_file(args.input)
 	ffmpeg_path = find_ffmpeg()
 
-	ensure_output_dir(output_dir)
+	ensure_output_dir(output_dir, args.force)
 	run_ffmpeg(
 		build_ffmpeg_command(ffmpeg_path, input_path, output_dir, args.force_rec709),
 		duration=probe_duration(ffmpeg_path, input_path),

@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import tempfile
 import unittest
+from pathlib import Path
 
 from wkt.batch import is_batchable, run_batch
 from wkt.core.args import add_input_argument
@@ -78,6 +80,49 @@ class BatchTests(unittest.TestCase):
 			quiet(run_batch, lambda a: None, argparse.Namespace(input=["a", "b"], output=None, output_dir="d"))
 		code, _, _ = quiet(run_batch, lambda a: None, argparse.Namespace(input=["a"], output="x.mp4", output_dir=None))
 		self.assertEqual(code, 0)
+
+	def test_dry_run_previews_without_running_and_reports_existing_output(self) -> None:
+		with tempfile.TemporaryDirectory() as raw:
+			root = Path(raw)
+			(root / "a.jpg").write_bytes(b"a")
+			(root / "b.jpg").write_bytes(b"b")
+			(root / "b.png").write_bytes(b"keep")
+			seen = []
+			args = make_args([str(root / "a.jpg"), str(root / "b.jpg")])
+			args.force = False
+			args.dry_run = True
+			args.planner = lambda item: Path(item.input).with_suffix(".png")
+			code, out, _ = quiet(run_batch, lambda item: seen.append(item.input), args)
+			self.assertEqual(code, 1)
+			self.assertEqual(seen, [])
+			self.assertIn("新增", out)
+			self.assertIn("衝突（需 --force）", out)
+			self.assertFalse((root / "a.png").exists())
+			self.assertEqual((root / "b.png").read_bytes(), b"keep")
+
+	def test_batch_rejects_duplicate_targets_before_running(self) -> None:
+		with tempfile.TemporaryDirectory() as raw:
+			root = Path(raw)
+			inputs = []
+			for folder in ("left", "right"):
+				parent = root / folder
+				parent.mkdir()
+				file = parent / "same.jpg"
+				file.write_bytes(b"x")
+				inputs.append(str(file))
+			args = make_args(inputs)
+			args.planner = lambda item: root / "out" / "same.png"
+			seen = []
+			with self.assertRaisesRegex(WktError, "輸出路徑重複"):
+				quiet(run_batch, lambda item: seen.append(item.input), args)
+			self.assertEqual(seen, [])
+			args.dry_run = True
+			args.force = False
+			code, out, _ = quiet(run_batch, lambda item: seen.append(item.input), args)
+			self.assertEqual(code, 1)
+			self.assertEqual(seen, [])
+			self.assertEqual(out.count("  → "), 2)
+			self.assertIn("批次輸出重複", out)
 
 
 if __name__ == "__main__":

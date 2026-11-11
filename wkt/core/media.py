@@ -14,7 +14,7 @@ from typing import Any
 from wkt.core import ui
 from wkt.core.args import add_input_argument
 from wkt.core.errors import WktError
-from wkt.core.paths import derive_output, ensure_not_same, require_input_file
+from wkt.core.paths import derive_output, ensure_not_same, ensure_output_available, require_input_file
 
 
 Size = tuple[int, int]  # (寬, 高)
@@ -132,6 +132,14 @@ def add_media_arguments(parser: argparse.ArgumentParser, tag: str) -> None:
 	parser.add_argument("--type", choices=MEDIA_TYPES, default="auto", help="指定媒體類型，預設 auto")
 
 
+def plan_frame_tool(args: argparse.Namespace, tag: str) -> Path:
+	input_path = require_input_file(args.input)
+	output_path = derive_output(input_path, args.output, tag=tag, out_dir=args.out_dir)
+	ensure_not_same(input_path, output_path)
+	ensure_output_available(output_path, args.force)
+	return output_path
+
+
 def run_frame_tool(
 	args: argparse.Namespace,
 	*,
@@ -141,17 +149,18 @@ def run_frame_tool(
 	output_size: Size,
 ) -> None:
 	"""圖片／影片逐幀工具的完整流程：驗證 → 判斷類型 → 逐幀處理 → 回報。"""
+	output_path = plan_frame_tool(args, tag)
 	input_path = require_input_file(args.input)
-	output_path = derive_output(input_path, args.output, tag=tag)
-	ensure_not_same(input_path, output_path)
 
 	media_type = args.type
 	if media_type == "auto":
 		media_type = detect_media_type(input_path)
 
 	if media_type == "image":
+		output_path.parent.mkdir(parents=True, exist_ok=True)
 		transform_image(input_path, output_path, frame_fn, expected_size)
 	else:
+		output_path.parent.mkdir(parents=True, exist_ok=True)
 		transform_video(input_path, output_path, frame_fn, expected_size, output_size)
 
 	print(f"完成：{output_path}")

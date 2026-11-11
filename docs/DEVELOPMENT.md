@@ -128,7 +128,8 @@ wkt/tools/togif.py: run(args)        ← 每次只拿到一個檔案（args.inpu
 - 所有工具的輸入參數都用 `add_input_argument()` 宣告（`nargs="+"`），所以 `wkt togif a.mp4 b.mp4 c.mp4` 可以一次處理多個。
 - 只有一個檔案：行為和以前完全一樣（錯誤直接往上拋、結束碼沿用）。
 - 多個檔案：逐一執行，顯示 `[i/n]`；**某個檔案失敗不會中斷後面的**；最後顯示「完成 x／n」與失敗清單，只要有失敗結束碼就是 1。
-- 多個檔案時不能指定 `-o`／`--output-dir`（會拒絕），輸出放在各檔案旁邊。
+- 多個檔案時不能指定 `-o`／`--output-dir`；可用 `--out-dir` 統一指定輸出資料夾。相同輸出路徑會在處理前拒絕。
+- `--dry-run` 呼叫每個工具的 `plan(args)` 預覽輸出，不執行轉檔；`--force` 才允許覆蓋既有輸出。
 
 ### 右鍵選單的執行階段（wkt/launcher.py）
 
@@ -158,6 +159,7 @@ N 個程序各自：① 把自己的檔案寫進佇列 %LOCALAPPDATA%\WKT\queue\
 | `run(args)` | 函式 | 執行工具。成功回傳 `None`；失敗 `raise WktError` |
 
 指令名稱不可重複（包含內建指令），重複時載入就會報錯。
+檔案處理工具另須提供 `plan(args) -> Path`，驗證輸入與輸出衝突並回傳預計輸出路徑；函式不可建立資料夾或啟動轉檔，供批次檢查與 `--dry-run` 使用。
 
 ### 分類（CATEGORY）
 
@@ -249,8 +251,9 @@ WktError(message: str, exit_code: int = 1)
 | 函式 | 用途 |
 |---|---|
 | `require_input_file(raw) -> Path` | 輸入必須存在且是檔案，否則 `WktError` |
-| `derive_output(input_path, output_arg, *, tag=None, suffix=None) -> Path` | 決定輸出路徑。有 `-o` 就用它；否則依 `tag` 與 `suffix` 規則（見第 5 節）產生 |
+| `derive_output(input_path, output_arg, *, tag=None, suffix=None, out_dir=None) -> Path` | 決定輸出路徑；`out_dir` 可將輸出集中到指定資料夾 |
 | `ensure_not_same(input_path, output_path)` | 輸出與輸入相同時 `WktError` |
+| `ensure_output_available(output_path, force, *, directory=False)` | 檢查既有輸出及覆蓋權限，不修改檔案 |
 
 ### `core/ffmpeg.py`
 
@@ -265,7 +268,7 @@ WktError(message: str, exit_code: int = 1)
 
 | 函式 | 用途 |
 |---|---|
-| `add_input_argument(parser, help_text)` | 宣告「一個或多個輸入檔」。**所有工具都要用它**，才會自動支援多檔案；`run()` 仍然只會拿到單一檔案 |
+| `add_input_argument(parser, help_text)` | 宣告輸入檔與 `--out-dir`、`--force`、`--dry-run`；`run()` 仍然只會拿到單一檔案 |
 
 ### `core/ui.py`
 
@@ -326,13 +329,21 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
 - 輸入檔一律用 `add_input_argument()`（來自 `wkt.core.args`），不要自己 `add_argument("input")`：這樣才會自動支援多檔案。輸出固定是 `-o/--output`（輸出一個資料夾時用 `-o/--output-dir`）。
 - 每個選項的預設值都要寫在 `help` 裡。
 
-### 步驟 5：寫 `run`
+### 步驟 5：寫 `plan` 與 `run`
 
 ```python
-def run(args: argparse.Namespace) -> None:
+def plan(args: argparse.Namespace) -> Path:
 	input_path = require_input_file(args.input)
-	output_path = derive_output(input_path, args.output, suffix=".mp3")
+	output_path = derive_output(input_path, args.output, suffix=".mp3", out_dir=args.out_dir)
 	ensure_not_same(input_path, output_path)
+	ensure_output_available(output_path, args.force)
+	return output_path
+
+
+def run(args: argparse.Namespace) -> None:
+	output_path = plan(args)
+	input_path = require_input_file(args.input)
+	output_path.parent.mkdir(parents=True, exist_ok=True)
 
 	ffmpeg_path = find_ffmpeg()
 	run_ffmpeg(
@@ -342,7 +353,7 @@ def run(args: argparse.Namespace) -> None:
 	print(f"完成：{output_path}")
 ```
 
-這個流程（驗證輸入 → 決定輸出 → 防止覆蓋 → 執行 → 回報）是所有 ffmpeg 類工具的標準骨架。
+`plan()` 只驗證並回傳路徑，不能寫入檔案；`run()` 在執行前呼叫它。這讓 `--dry-run` 與正式執行使用相同的輸出規則。
 
 - `run()` **每次只會拿到一個檔案**（`args.input` 是字串），不要自己寫迴圈；多檔案由 `wkt.batch` 處理。
 - `duration` 讓 `run_ffmpeg` 能顯示進度條。輸出是圖片、沒有「長度」的工具（如 `topng`）可以省略。
@@ -549,6 +560,13 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - 選單執行：全部成功自動關閉、有失敗就停住。選單登記的指令多了 `--from-menu`，**升級後要重新註冊**（`wkt doctor` 會提醒）。
 - 新增 `wkt doctor` 與一鍵安裝 `install.cmd`。
 - 找不到 ffmpeg 的訊息現在附上安裝指令。
+
+**v1.5.0 的變更**（togif 預設組與大小上限）：
+
+- `togif --profile small｜standard｜high`（`-p`）：一組 `fps／width／colors`；`standard` 等於舊的預設值。優先順序：命令列參數 > `--profile` > 預設組。
+- 實作：`--fps／--width／--colors` 的 argparse default 改為 `None`，由 `wkt/core/profiles.py` 的 `apply_profile()` 在 `plan()` 開頭補值；其他工具要加預設組可重用。
+- `togif --max-size 8MB`：輸出超過上限時，依序縮小寬度、降低 fps、減少顏色後重試（最多 8 次，有下限）；仍無法達標則報錯且不留下輸出檔。單位必須明確（B／KB／MB／GB，1024 進位）。
+- 注意：來源比 `--width` 窄時，縮小 `--width` 不會讓輸出變小，會多耗幾次重試。
 
 **v1.4.0 的變更**（指令分類）：
 

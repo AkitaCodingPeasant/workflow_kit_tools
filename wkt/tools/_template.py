@@ -11,7 +11,7 @@ from pathlib import Path
 
 from wkt.core.args import add_input_argument
 from wkt.core.ffmpeg import find_ffmpeg, probe_duration, run_ffmpeg
-from wkt.core.paths import derive_output, ensure_not_same, require_input_file
+from wkt.core.paths import derive_output, ensure_not_same, ensure_output_available, require_input_file
 
 
 # ── 1. 工具資訊（registry 會檢查這五個名稱都存在）──────────────────────────
@@ -48,11 +48,18 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
 # ── 4. 執行：成功就印「完成：…」；失敗一律 raise WktError，不要自己 print／exit ──
 # 注意：run() 每次只會拿到「一個」檔案（args.input 是字串）。多檔案由 wkt.batch 逐一呼叫，
 # 工具本身不需要處理迴圈、不需要處理 -o 與多檔案的衝突。
-def run(args: argparse.Namespace) -> None:
+def plan(args: argparse.Namespace) -> Path:
 	input_path = require_input_file(args.input)
-	output_path = derive_output(input_path, args.output, tag=DEFAULT_TAG)
+	output_path = derive_output(input_path, args.output, tag=DEFAULT_TAG, out_dir=args.out_dir)
 	ensure_not_same(input_path, output_path)
+	ensure_output_available(output_path, args.force)
+	return output_path
 
+
+def run(args: argparse.Namespace) -> None:
+	output_path = plan(args)
+	input_path = require_input_file(args.input)
+	output_path.parent.mkdir(parents=True, exist_ok=True)
 	ffmpeg_path = find_ffmpeg()
 	# duration（秒）讓 run_ffmpeg 能顯示進度條；輸出是圖片等「沒有長度」的工具可以省略
 	run_ffmpeg(
