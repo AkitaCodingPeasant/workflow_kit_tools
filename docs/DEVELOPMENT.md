@@ -55,7 +55,7 @@ set WKT_DEBUG=1                          未預期的例外顯示完整 tracebac
 workflow_kit_tools/
 ├── wkt.cmd                  指令入口（右鍵選單與使用者都呼叫它）
 ├── install.cmd              一鍵安裝入口（唯一需要手動雙擊的檔案）
-├── requirements.txt         選用相依套件（OpenCV、numpy）
+├── requirements.txt         選用相依套件（OpenCV、numpy、questionary）
 ├── README.md                使用說明
 ├── .editorconfig  .gitignore
 │
@@ -560,6 +560,14 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - 選單執行：全部成功自動關閉、有失敗就停住。選單登記的指令多了 `--from-menu`，**升級後要重新註冊**（`wkt doctor` 會提醒）。
 - 新增 `wkt doctor` 與一鍵安裝 `install.cmd`。
 - 找不到 ffmpeg 的訊息現在附上安裝指令。
+
+**v1.6.0 的變更**（互動選單）：
+
+- 在互動終端機輸入不帶參數的 `wkt` 會開啟 TUI（`wkt/tui.py`，使用 questionary）。`wkt -h`、`wkt help`、`wkt --no-tui`、環境變數 `WKT_NO_TUI=1`、輸入或輸出被導向時都維持原本的說明輸出。
+- TUI 只負責收集選擇並組出 argv，實際執行交給 `cli.main()`，與命令列同一條路徑；畫面與純函式分開（`parse_paths`、`list_media`、`reflect_fields`、`build_argv` 等可直接測試）。
+- 參數表單以反射工具自己的 argparse 定義產生（choices → 選單、`store_true` → 開關、其餘 → 輸入框），新增工具不需要為 TUI 做任何事；沒有 `input` 參數的指令（doctor、menu、dev 等管理指令）改為顯示說明並讓使用者輸入參數。
+- 資料夾挑選的副檔名在 `tui.INPUT_EXTENSIONS`：不在表內的工具顯示所有影片與圖片，新增吃特殊格式的工具時要補上。
+- 最近使用的工具記在 `%APPDATA%\WKT\recent.json`（寫入失敗會略過）。questionary 缺少時 TUI 提示安裝，其他功能不受影響；`wkt doctor` 會檢查它。
 
 **v1.5.0 的變更**（togif 預設組與大小上限）：
 
