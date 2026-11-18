@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import struct
 import tempfile
 import unittest
@@ -10,6 +12,7 @@ import zipfile
 from pathlib import Path
 
 from wkt import dev, install
+from wkt.core import env
 from wkt.core.errors import WktError
 
 
@@ -95,6 +98,28 @@ class InstallTests(unittest.TestCase):
 		self.assertEqual(plain[-1], str(install.SCRIPT))
 		full = install.powershell_command(self._args(yes=True, no_path=True, no_menu=True))
 		self.assertEqual(full[-3:], ["-Yes", "-NoPath", "-NoMenu"])
+		self.assertNotIn("-Mode", plain)
+
+	def test_command_passes_install_mode(self) -> None:
+		for mode in ("global", "venv"):
+			command = install.powershell_command(self._args(mode=mode))
+			self.assertEqual(command[-2:], ["-Mode", mode])
+
+	def test_parser_rejects_unknown_mode(self) -> None:
+		parser = argparse.ArgumentParser()
+		install.configure_parser(parser)
+		self.assertEqual(parser.parse_args(["--mode", "venv"]).mode, "venv")
+		self.assertIsNone(parser.parse_args([]).mode)
+		with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+			parser.parse_args(["--mode", "conda"])
+
+	def test_ps1_and_launcher_agree_on_mode_file(self) -> None:
+		ps1 = install.SCRIPT.read_text(encoding="utf-8-sig")
+		launcher = (ROOT / "wkt.cmd").read_text(encoding="utf-8")
+		for text in (ps1, launcher):
+			self.assertIn(env.MODE_FILE.name, text)
+			self.assertIn(env.VENV_DIR.name, text)
+		self.assertIn("[ValidateSet('', 'global', 'venv')]", ps1)
 
 	def test_installer_files_exist_and_ps1_has_bom(self) -> None:
 		self.assertTrue((ROOT / "install.cmd").is_file())

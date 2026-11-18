@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from wkt import __version__
+from wkt.core import env
 from wkt.core.errors import WktError
 from wkt.core.ffmpeg import find_ffmpeg
 
 
 NAME = "doctor"
-SUMMARY = "檢查執行環境（Python／ffmpeg／OpenCV／選單／PATH）並提供修復建議"
+SUMMARY = "檢查執行環境（Python／安裝方式／ffmpeg／OpenCV／選單／PATH）並提供修復建議"
 CATEGORY = "manage"
 
 OK, WARN, FAIL = "ok", "warn", "fail"
@@ -49,6 +50,18 @@ def check_python() -> Check:
 		f"{version} 太舊，需要 {MIN_PYTHON[0]}.{MIN_PYTHON[1]} 以上",
 		"winget install Python.Python.3.12",
 	)
+
+
+def check_install_mode() -> Check:
+	mode = env.configured_mode()
+	name = "安裝方式"
+	if mode == env.VENV:
+		if not env.VENV_PYTHON.is_file():
+			return Check(name, FAIL, f"設定為虛擬環境，但找不到 {env.VENV_PYTHON}（目前改用全域 Python）", "wkt install --mode venv")
+		if not env.running_in_venv():
+			return Check(name, WARN, f"設定為虛擬環境，但目前以全域 Python 執行（{sys.executable}）", "改用 wkt 指令執行")
+		return Check(name, OK, f"{env.MODE_TEXT[mode]}：{env.VENV_DIR}")
+	return Check(name, OK, f"{env.MODE_TEXT[mode]}：{sys.executable}（切換：wkt install --mode venv）")
 
 
 def _ffmpeg_output(ffmpeg_path: str, *args: str) -> str:
@@ -100,7 +113,7 @@ def check_opencv() -> Check:
 			"OpenCV／numpy",
 			WARN,
 			f"未安裝 {'、'.join(missing)}（只有 to1080、to1088 需要）",
-			"py -3 -m pip install -r requirements.txt",
+			env.pip_install_hint(),
 		)
 	return Check("OpenCV／numpy", OK, "、".join(versions))
 
@@ -113,7 +126,7 @@ def check_questionary() -> Check:
 			"questionary",
 			WARN,
 			"未安裝（只有互動選單需要；wkt 其他功能不受影響）",
-			"py -3 -m pip install -r requirements.txt",
+			env.pip_install_hint(),
 		)
 	return Check("questionary", OK, f"questionary {questionary.__version__}")
 
@@ -171,7 +184,7 @@ def check_path() -> Check:
 
 
 def run_checks() -> list[Check]:
-	checks = [check_python(), check_ffmpeg(), check_opencv(), check_questionary()]
+	checks = [check_python(), check_install_mode(), check_ffmpeg(), check_opencv(), check_questionary()]
 	checks.extend(check_menu())
 	checks.append(check_path())
 	return checks
@@ -194,7 +207,7 @@ def summarize(checks: list[Check]) -> tuple[int, int]:
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
-	parser.description = "檢查 Python、ffmpeg、OpenCV、右鍵選單與 PATH，並對每個問題給出修復指令。有失敗項目時結束碼為 1。"
+	parser.description = "檢查 Python、安裝方式、ffmpeg、OpenCV、右鍵選單與 PATH，並對每個問題給出修復指令。有失敗項目時結束碼為 1。"
 
 
 def run(args: argparse.Namespace, checker: Callable[[], list[Check]] = run_checks) -> None:

@@ -68,7 +68,7 @@ workflow_kit_tools/
 │   ├── launcher.py          右鍵選單執行階段：多選彙整、結果畫面、失敗停住
 │   ├── menu.py              右鍵選單的設定（MENU）與註冊／解除／狀態
 │   ├── doctor.py            wkt doctor：環境檢查與修復建議
-│   ├── install.py           wkt install：重新執行安裝（修復用）
+│   ├── install.py           wkt install：重新執行安裝（修復用、切換全域／虛擬環境）
 │   ├── dev.py               wkt dev：測試、打包、轉換圖示、更新
 │   ├── core/                所有工具共用的功能（見第 6 節）
 │   │   ├── errors.py        WktError
@@ -449,6 +449,7 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 | `tests/test_core.py` | `core/paths.py` 的規則、時間碼解析、進度條 | 否 |
 | `tests/test_batch.py` | 批次執行：單檔／多檔／失敗不中斷／`-o` 衝突 | 否 |
 | `tests/test_doctor.py` | `wkt doctor` 的檢查與結束碼 | 否 |
+| `tests/test_env.py` | 安裝方式記錄檔（`.wkt-env`）的讀取、doctor 的安裝方式檢查 | 否 |
 | `tests/test_dev.py` | `wkt dev`（打包、圖示）與 `wkt install`；防止 `install.ps1` 遺失 BOM | 部分需要 OpenCV |
 | `tests/test_commands.py` | 各工具「組 ffmpeg 指令」的純函式 | 否 |
 | `tests/test_cli.py` | CLI 行為、各工具端對端、批次、進度條（用 ffmpeg 即時產生測試影片） | 是，沒裝會自動略過 |
@@ -476,9 +477,9 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 **在其他電腦安裝**：
 
 1. 解壓縮到固定資料夾（之後不要搬動）。
-2. 雙擊根目錄的 `install.cmd`（**整個流程唯一需要手動點的一步**，之後都用 `wkt` 指令）。它會依序：補齊 Python 與 ffmpeg（`winget`）和 OpenCV（`pip`）→ 把專案資料夾加入使用者 PATH → 註冊右鍵選單 → 執行 `wkt doctor` 確認。開始前會列出將要做的事並詢問確認。
+2. 雙擊根目錄的 `install.cmd`（**整個流程唯一需要手動點的一步**，之後都用 `wkt` 指令）。它會依序：詢問 Python 安裝方式（全域／虛擬環境 `.venv`）→ 補齊 Python 與 ffmpeg（`winget`）和 OpenCV 等套件（`pip`，裝進所選環境）→ 把專案資料夾加入使用者 PATH → 註冊右鍵選單 → 執行 `wkt doctor` 確認。開始前會列出將要做的事並詢問確認。
 
-`install.cmd` 的參數：`-CheckOnly`（只檢查，不改任何東西）、`-Yes`（不詢問）、`-NoPath`（不改 PATH）、`-NoMenu`（不註冊選單）。裝好之後要修復或重裝，用 `wkt install`（參數 `--yes`、`--no-path`、`--no-menu`）；只想檢查用 `wkt doctor`。第一次安裝必須是 `install.cmd`，因為那時電腦上可能還沒有 Python。
+`install.cmd` 的參數：`-CheckOnly`（只檢查，不改任何東西）、`-Yes`（不詢問）、`-NoPath`（不改 PATH）、`-NoMenu`（不註冊選單）、`-Mode global｜venv`（指定安裝方式，不詢問）。裝好之後要修復、重裝或切換安裝方式，用 `wkt install`（參數 `--yes`、`--no-path`、`--no-menu`、`--mode`）；只想檢查用 `wkt doctor`。第一次安裝必須是 `install.cmd`，因為那時電腦上可能還沒有 Python。
 
 安裝後 PATH 要**重新開啟終端機**才會生效，在那之前請用完整路徑或 `.\wkt`。
 沒有 `winget` 的電腦（舊版 Windows 10）請手動安裝 Python、ffmpeg 後再執行。剛用 winget 裝好的程式，若目前視窗還找不到，請關掉視窗重新執行一次。
@@ -502,7 +503,8 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 | 右鍵選單看不到 WKT | Windows 11 要按「顯示更多選項」或 Shift+F10；再用 `wkt menu status` 確認是否已註冊 |
 | 移動資料夾後選單沒反應 | 重新執行 `wkt menu register` |
 | 找不到 ffmpeg | 安裝 ffmpeg（例如 `winget install Gyan.FFmpeg`）並重新開啟終端機，使 PATH 生效 |
-| `缺少 opencv-python` | `pip install -r requirements.txt` |
+| `缺少 opencv-python` | `wkt doctor` 會依安裝方式給出正確的 pip 指令（全域：`py -3 -m pip ...`；虛擬環境：`.venv\Scripts\python.exe -m pip ...`） |
+| doctor 顯示「設定為虛擬環境，但找不到 .venv」 | `.venv` 被刪除或搬動；執行 `wkt install --mode venv` 重建（期間 `wkt.cmd` 會暫時改用全域 Python） |
 | 尺寸必須是 1920x1088 | `to1080` 只接受 1920x1088；`to1088` 只接受 1920x1080 |
 | 從選單執行時視窗一閃而過 | 全部成功時會顯示結果、3 秒後自動關閉；失敗則會停住等你按 Enter。若連失敗都一閃而過，先執行 `wkt doctor`，再在終端機直接執行同一個指令查看 |
 | 不確定環境哪裡有問題 | 執行 `wkt doctor`：逐項檢查並附修復指令；`install.cmd -CheckOnly` 效果相同 |
@@ -560,6 +562,15 @@ py -3 -m unittest discover -s tests -k togif      以關鍵字篩選
 - 選單執行：全部成功自動關閉、有失敗就停住。選單登記的指令多了 `--from-menu`，**升級後要重新註冊**（`wkt doctor` 會提醒）。
 - 新增 `wkt doctor` 與一鍵安裝 `install.cmd`。
 - 找不到 ffmpeg 的訊息現在附上安裝指令。
+
+**v1.7.0 的變更**（Python 安裝方式）：
+
+- 安裝時可選擇**全域 Python** 或**虛擬環境**（專案根目錄的 `.venv`）。選擇記錄在根目錄的 `.wkt-env`（內容為 `global` 或 `venv`，已加入 `.gitignore`）；沒有這個檔案視為全域，相容舊版安裝。
+- `wkt.cmd` 讀取 `.wkt-env`：`venv` 且 `.venv\Scripts\python.exe` 存在時用它，否則用 `py -3`。右鍵選單呼叫的也是 `wkt.cmd`，所以切換後不需要重新註冊選單。
+- 已安裝後再執行 `install.cmd`／`wkt install` 會顯示目前方式並可重新選擇；`-Mode`／`--mode` 直接指定；`-Yes` 不指定時沿用目前方式。
+- 切回全域時**不刪除** `.venv`：從 `wkt install` 執行時 `.venv` 的 python.exe 正在使用中無法刪除，而且資料夾可能是使用者自己建立的。只提示可手動刪除。
+- 安裝時的套件檢查加入 questionary（原本只檢查 OpenCV／numpy，缺 questionary 不會補裝）。
+- 讀取記錄檔的邏輯集中在 `wkt/core/env.py`；`wkt doctor` 新增「安裝方式」檢查，pip 修復建議會依安裝方式顯示。
 
 **v1.6.0 的變更**（互動選單）：
 

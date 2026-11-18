@@ -23,6 +23,7 @@ from pathlib import Path
 from types import ModuleType
 
 from wkt import __version__
+from wkt.core.env import pip_install_hint
 from wkt.core.errors import WktError
 from wkt.registry import CATEGORIES, group_by_category, load_commands
 
@@ -459,7 +460,7 @@ def category_flow(screen: Screen, key: str, modules: list[ModuleType]) -> None:
 def run_tui() -> int:
 	questionary = _load_questionary()
 	if questionary is None:
-		print("TUI 需要 questionary 套件：py -3 -m pip install -r requirements.txt", file=sys.stderr)
+		print(f"TUI 需要 questionary 套件：{pip_install_hint()}", file=sys.stderr)
 		print("改用命令列：wkt help", file=sys.stderr)
 		return 1
 

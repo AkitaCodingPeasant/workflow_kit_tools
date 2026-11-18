@@ -3,3 +3,5 @@ __pycache__/
 dist/
 archive/
 desktop.ini
+.venv/
+.wkt-env

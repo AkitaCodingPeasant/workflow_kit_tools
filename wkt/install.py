@@ -2,7 +2,8 @@
 
 第一次安裝時 Python 可能還不存在，所以首次安裝只能雙擊根目錄的 install.cmd；
 裝好之後，要修復或重裝都可以直接用這個指令。實際工作由 scripts/install.ps1 完成。
-想「只檢查、不修改」請用 wkt doctor。
+已安裝後再執行也可以切換 Python 安裝方式（全域 Python／虛擬環境 .venv），例如 wkt install --mode venv；
+不指定 --mode 時安裝腳本會詢問。想「只檢查、不修改」請用 wkt doctor。
 """
 
 from __future__ import annotations
@@ -11,11 +12,12 @@ import argparse
 import subprocess
 from pathlib import Path
 
+from wkt.core.env import MODES
 from wkt.core.errors import WktError
 
 
 NAME = "install"
-SUMMARY = "重新執行一鍵安裝：補齊 ffmpeg／OpenCV、加入 PATH、註冊右鍵選單（修復用）"
+SUMMARY = "重新執行一鍵安裝：切換全域／虛擬環境、補齊 ffmpeg／OpenCV、PATH、右鍵選單"
 CATEGORY = "manage"
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "install.ps1"
@@ -29,14 +31,24 @@ def powershell_command(args: argparse.Namespace, script: Path = SCRIPT) -> list[
 		command.append("-NoPath")
 	if args.no_menu:
 		command.append("-NoMenu")
+	if getattr(args, "mode", None):
+		command.extend(["-Mode", args.mode])
 	return command
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
-	parser.description = "補齊缺少的 ffmpeg／OpenCV、把 wkt 加入 PATH、註冊右鍵選單，最後自動執行 wkt doctor。"
+	parser.description = (
+		"選擇（或切換）Python 安裝方式，補齊缺少的 ffmpeg／OpenCV、把 wkt 加入 PATH、註冊右鍵選單，"
+		"最後自動執行 wkt doctor。"
+	)
 	parser.add_argument("-y", "--yes", action="store_true", help="不詢問確認，直接執行")
 	parser.add_argument("--no-path", action="store_true", help="不修改使用者 PATH")
 	parser.add_argument("--no-menu", action="store_true", help="不註冊右鍵選單")
+	parser.add_argument(
+		"--mode",
+		choices=MODES,
+		help="Python 安裝方式：global 全域 Python／venv 專案內的虛擬環境（不指定時詢問；搭配 --yes 則沿用目前方式）",
+	)
 
 
 def run(args: argparse.Namespace) -> None:

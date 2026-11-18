@@ -1,6 +1,7 @@
 ﻿<#
 .SYNOPSIS
-  WKT 一鍵安裝：補齊 Python、ffmpeg、OpenCV，加入 PATH，註冊右鍵選單，最後執行 wkt doctor 確認。
+  WKT 一鍵安裝：選擇 Python 安裝方式（全域／虛擬環境），補齊 Python、ffmpeg、OpenCV，
+  加入 PATH，註冊右鍵選單，最後執行 wkt doctor 確認。
 
 .PARAMETER CheckOnly
   只執行 wkt doctor 檢查，不安裝或修改任何東西。
@@ -10,17 +11,27 @@
   不修改使用者的 PATH。
 .PARAMETER NoMenu
   不註冊右鍵選單。
+.PARAMETER Mode
+  Python 安裝方式：global（全域 Python）或 venv（專案內的 .venv 虛擬環境）。
+  不指定時會詢問；搭配 -Yes 則沿用目前的方式（第一次安裝為 global）。
+  已安裝後再次執行可切換安裝方式。
 #>
 param(
 	[switch]$CheckOnly,
 	[switch]$Yes,
 	[switch]$NoPath,
-	[switch]$NoMenu
+	[switch]$NoMenu,
+	[ValidateSet('', 'global', 'venv')]
+	[string]$Mode = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $wkt = Join-Path $root 'wkt.cmd'
+$modeFile = Join-Path $root '.wkt-env'
+$venvDir = Join-Path $root '.venv'
+$venvPython = Join-Path $venvDir 'Scripts\python.exe'
+$modeText = @{ global = '全域 Python'; venv = '虛擬環境（.venv）' }
 
 function Write-Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
 function Write-Done($text) { Write-Host "    $text" -ForegroundColor Green }
@@ -52,8 +63,43 @@ function Test-FFmpeg {
 	Test-Native { py -3 -c "import sys; sys.path.insert(0, sys.argv[1]); from wkt.core.ffmpeg import find_ffmpeg; find_ffmpeg()" $root }
 }
 
-function Test-OpenCV {
-	Test-Native { py -3 -c "import cv2, numpy" }
+function Invoke-TargetPython {
+	# 用目前選定的安裝方式執行 Python：venv 用 .venv 的 python.exe，global 用 py -3
+	if ($script:Mode -eq 'venv') { & $venvPython @args } else { & py -3 @args }
+}
+
+function Test-Venv {
+	Test-Native { & $venvPython -c "import sys; sys.exit(0 if sys.prefix != sys.base_prefix else 1)" }
+}
+
+function Test-Packages {
+	# 有 .venv 但壞掉時也視為缺少，交給後面的步驟處理
+	Test-Native { Invoke-TargetPython -c "import cv2, numpy, questionary" }
+}
+
+function Get-InstalledMode {
+	# 回傳目前記錄的安裝方式；從未用新版安裝過時回傳 $null
+	if (-not (Test-Path -LiteralPath $modeFile)) { return $null }
+	$value = (Get-Content -LiteralPath $modeFile -Raw -Encoding UTF8).Trim().ToLower()
+	if ($value -in @('global', 'venv')) { return $value }
+	return $null
+}
+
+function Select-Mode([string]$current) {
+	$default = if ($current) { $current } else { 'global' }
+	Write-Host ''
+	Write-Host 'Python 安裝方式：'
+	Write-Host '  1) 全域 Python      套件裝進系統的 Python，與其他程式共用'
+	Write-Host '  2) 虛擬環境（.venv） 套件裝在專案資料夾內，不影響系統 Python'
+	if ($current) { Write-Host "  目前使用：$($modeText[$current])" -ForegroundColor DarkGray }
+	$defaultKey = if ($default -eq 'venv') { '2' } else { '1' }
+	while ($true) {
+		$answer = (Read-Host "請選擇 (1/2，直接按 Enter = $defaultKey)").Trim()
+		if (-not $answer) { return $default }
+		if ($answer -eq '1') { return 'global' }
+		if ($answer -eq '2') { return 'venv' }
+		Write-Warn '請輸入 1 或 2。'
+	}
 }
 
 function Test-InUserPath([string]$dir) {
@@ -98,15 +144,29 @@ if ($CheckOnly) {
 
 # ── 偵測現況並列出將要做的事 ───────────────────────────────────────────────
 Write-Host "WKT 安裝（專案位置：$root）" -ForegroundColor White
+$installedMode = Get-InstalledMode
+if ($installedMode) { Write-Host "目前的 Python 安裝方式：$($modeText[$installedMode])" }
+if (-not $Mode) {
+	if ($Yes) {
+		$Mode = if ($installedMode) { $installedMode } else { 'global' }
+	} else {
+		$Mode = Select-Mode $installedMode
+	}
+}
+$previousMode = if ($installedMode) { $installedMode } else { 'global' }   # 舊版安裝沒有記錄檔，視為全域
+
 $needPython = -not (Test-Python)
+$needVenv = ($Mode -eq 'venv') -and ($needPython -or -not (Test-Venv))
 $needFFmpeg = $needPython -or -not (Test-FFmpeg)   # 沒有 Python 時無法判斷 ffmpeg，安裝完 Python 後再確認
-$needOpenCV = $needPython -or -not (Test-OpenCV)
+$needPackages = $needPython -or $needVenv -or -not (Test-Packages)
 $needPath = (-not $NoPath) -and (-not (Test-InUserPath $root))
 
 $plan = @()
+if ($Mode -ne $previousMode) { $plan += "切換 Python 安裝方式：$($modeText[$previousMode]) → $($modeText[$Mode])" }
 if ($needPython) { $plan += '安裝 Python 3.12（winget）' }
+if ($needVenv) { $plan += "在專案資料夾建立虛擬環境：$venvDir" }
 if ($needFFmpeg) { $plan += '安裝 ffmpeg（winget；已安裝則略過）' }
-if ($needOpenCV) { $plan += '安裝 OpenCV 與 numpy（pip，to1080／to1088 需要）' }
+if ($needPackages) { $plan += "安裝 OpenCV、numpy、questionary 到$($modeText[$Mode])（pip）" }
 if ($needPath) { $plan += "把專案資料夾加入使用者 PATH，讓終端機可直接輸入 wkt" }
 if (-not $NoMenu) { $plan += '註冊（或更新）檔案總管右鍵選單' }
 $plan += '執行 wkt doctor 確認結果'
@@ -128,6 +188,23 @@ if ($needPython) {
 }
 Write-Done '可用'
 
+Write-Step "Python 安裝方式：$($modeText[$Mode])"
+if ($Mode -eq 'venv') {
+	if (-not (Test-Venv)) {
+		& py -3 -m venv $venvDir
+		if ($LASTEXITCODE -ne 0 -or -not (Test-Venv)) { throw "建立虛擬環境失敗：$venvDir" }
+		Write-Done "已建立 $venvDir"
+	} else {
+		Write-Done "使用既有的 $venvDir"
+	}
+}
+# 寫入記錄檔後，wkt.cmd（以及下方的右鍵選單註冊、doctor）就會改用對應的 Python
+[IO.File]::WriteAllText($modeFile, "$Mode`r`n", (New-Object Text.UTF8Encoding $false))
+if ($Mode -eq 'global' -and (Test-Path -LiteralPath $venvDir)) {
+	Write-Warn ".venv 已不再使用，需要時可手動刪除：$venvDir"
+}
+Write-Done '已設定'
+
 Write-Step 'ffmpeg'
 if (-not (Test-FFmpeg)) {
 	Install-WithWinget 'Gyan.FFmpeg' 'ffmpeg'
@@ -137,11 +214,12 @@ if (-not (Test-FFmpeg)) {
 }
 Write-Done '可用'
 
-Write-Step 'OpenCV／numpy'
-if (-not (Test-OpenCV)) {
-	& py -3 -m pip install -r (Join-Path $root 'requirements.txt')
+Write-Step 'OpenCV／numpy／questionary'
+if (-not (Test-Packages)) {
+	Invoke-TargetPython -m pip install -r (Join-Path $root 'requirements.txt')
 	if ($LASTEXITCODE -ne 0) {
-		Write-Warn '安裝失敗：to1080、to1088 暫時無法使用，其他功能不受影響。可稍後執行：py -3 -m pip install -r requirements.txt'
+		$pipHint = if ($Mode -eq 'venv') { '.venv\Scripts\python.exe' } else { 'py -3' }
+		Write-Warn "安裝失敗：to1080、to1088 與互動選單暫時無法使用，其他功能不受影響。可稍後執行：$pipHint -m pip install -r requirements.txt"
 	} else {
 		Write-Done '已安裝'
 	}

@@ -15,14 +15,17 @@
 
 雙擊根目錄的 **`install.cmd`**（**這是唯一需要手動點的一步**，之後所有操作都用 `wkt` 指令），它會：
 
-1. 補齊缺少的 Python、ffmpeg（用 `winget`）與 OpenCV（用 `pip`）
-2. 把專案資料夾加入使用者 PATH，讓終端機可直接輸入 `wkt`
-3. 註冊右鍵選單
-4. 執行 `wkt doctor` 確認結果
+1. 詢問 Python 安裝方式：**全域 Python**（套件裝進系統 Python）或 **虛擬環境**（套件裝在專案資料夾的 `.venv`，不影響系統 Python）
+2. 補齊缺少的 Python、ffmpeg（用 `winget`）與 OpenCV 等套件（用 `pip`，裝進所選的環境）
+3. 把專案資料夾加入使用者 PATH，讓終端機可直接輸入 `wkt`
+4. 註冊右鍵選單
+5. 執行 `wkt doctor` 確認結果
 
 開始前會列出將要做的事並詢問確認。想先看看環境有沒有問題：`install.cmd -CheckOnly` 或 `wkt doctor`（都不會修改任何東西）。
 
 安裝後請**重新開啟終端機**，PATH 才會生效。
+
+**切換安裝方式**：已安裝後再雙擊 `install.cmd`（或執行 `wkt install`）會顯示目前的方式並可重新選擇；也可以直接指定：`wkt install --mode venv`／`wkt install --mode global`（`install.cmd -Mode venv` 亦同）。從虛擬環境切回全域時 `.venv` 會保留，不需要可手動刪除。
 
 ## 使用
 
